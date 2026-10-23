@@ -1,5 +1,5 @@
 /* N8Books service worker — offline-first app shell */
-const CACHE = 'n8books-v3';
+const CACHE = 'n8books-v4';
 const ASSETS = [
   './',
   './index.html',
