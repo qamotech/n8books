@@ -1,0 +1,1496 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>N8Books — Books Without the Bookkeeper</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%92%8E%3C/text%3E%3C/svg%3E">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0a0e1a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="N8Books">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<style>
+:root{
+  --bg:#0a0e1a; --bg2:#0f1526; --panel:#131b31; --panel2:#18223c; --line:#24304f;
+  --txt:#e8eefc; --mut:#8fa3c8; --acc:#4cc9f0; --acc2:#7b2ff7; --grn:#3ddc84; --red:#ff5d7a;
+  --gold:#ffd166; --rad:16px; --sh:0 10px 30px rgba(0,0,0,.45);
+}
+html[data-theme="light"]{
+  --bg:#eef2f9; --bg2:#e2e9f5; --panel:#ffffff; --panel2:#f4f7fd; --line:#c9d4ea;
+  --txt:#16213a; --mut:#5a6c8f; --sh:0 10px 26px rgba(20,40,90,.12);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--txt);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;overflow-x:hidden;transition:background .3s,color .3s}
+::selection{background:var(--acc2);color:#fff}
+::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-thumb{background:#2b3a5f;border-radius:5px}::-webkit-scrollbar-track{background:transparent}
+
+/* ---------- ambient background ---------- */
+#bgfx{position:fixed;inset:0;z-index:-2;overflow:hidden;pointer-events:none}
+.orb{position:absolute;border-radius:50%;filter:blur(90px);opacity:.5;will-change:transform}
+.orb1{width:480px;height:480px;background:#123a6e;top:-140px;left:-120px}
+.orb2{width:420px;height:420px;background:#3a1160;bottom:-160px;right:-100px}
+.orb3{width:260px;height:260px;background:#0b4a3a;top:45%;left:55%}
+#gridfx{position:fixed;inset:0;z-index:-1;pointer-events:none;opacity:.05;
+  background-image:linear-gradient(var(--acc) 1px,transparent 1px),linear-gradient(90deg,var(--acc) 1px,transparent 1px);background-size:44px 44px}
+
+/* ---------- nav ---------- */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:center;gap:14px;
+  padding:12px 22px;background:color-mix(in srgb,var(--bg) 78%,transparent);backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--line);transition:.3s}
+nav.scrolled{box-shadow:var(--sh);padding:8px 22px}
+.logo{font-size:22px;font-weight:800;letter-spacing:.4px;background:linear-gradient(90deg,var(--acc),var(--acc2));
+  -webkit-background-clip:text;background-clip:text;color:transparent;white-space:nowrap}
+.logo small{display:block;font-size:10px;color:var(--mut);-webkit-text-fill-color:var(--mut);font-weight:600;letter-spacing:1.6px}
+.navlinks{display:flex;gap:4px;margin-left:8px;flex-wrap:wrap}
+.navlinks button{background:none;border:none;color:var(--mut);font:600 14.5px 'Segoe UI',sans-serif;padding:9px 14px;border-radius:10px;cursor:pointer;transition:.2s}
+.navlinks button:hover{color:var(--txt);background:var(--panel2)}
+.navlinks button.on{color:#fff;background:linear-gradient(90deg,var(--acc2),var(--acc));box-shadow:0 4px 14px rgba(90,60,220,.4)}
+.navright{margin-left:auto;display:flex;gap:8px;align-items:center}
+select,input,textarea{font:inherit}
+.yrsel,.themesw{background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:8px 10px;cursor:pointer;font-weight:600}
+.themesw{font-size:16px}
+.btn{background:linear-gradient(90deg,var(--acc2),var(--acc));color:#fff;border:none;border-radius:11px;padding:10px 18px;font-weight:700;cursor:pointer;transition:.2s;box-shadow:0 4px 14px rgba(90,60,220,.35)}
+.btn:hover{transform:translateY(-2px);box-shadow:0 8px 22px rgba(90,60,220,.5)}
+.btn:active{transform:scale(.97)}
+.btn.ghost{background:var(--panel2);color:var(--txt);border:1px solid var(--line);box-shadow:none}
+.btn.danger{background:linear-gradient(90deg,#c9184a,#ff5d7a)}
+.btn.small{padding:7px 12px;font-size:13px;border-radius:9px}
+
+/* ---------- hero ---------- */
+header.hero{padding:130px 22px 30px;text-align:center;position:relative}
+.hero h1{font-size:clamp(34px,6vw,58px);font-weight:900;line-height:1.05}
+.hero h1 .grad{background:linear-gradient(90deg,var(--acc),var(--acc2),var(--gold));-webkit-background-clip:text;background-clip:text;color:transparent;background-size:200% 100%;animation:shimmer 6s linear infinite}
+@keyframes shimmer{to{background-position:200% 0}}
+.hero p{color:var(--mut);font-size:clamp(15px,2.4vw,19px);margin-top:12px}
+.hero .cta{margin-top:22px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+
+/* ---------- layout / cards ---------- */
+main{max-width:1240px;margin:0 auto;padding:10px 22px 60px}
+section.page{display:none;animation:fadeUp .45s ease both}
+section.page.on{display:block}
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+.reveal{opacity:0;transform:translateY(26px);transition:opacity .7s ease,transform .7s cubic-bezier(.2,.8,.25,1)}
+.reveal.in{opacity:1;transform:none}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px;margin:18px 0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--rad);padding:20px;box-shadow:var(--sh);position:relative;overflow:hidden;transition:transform .25s}
+.card:hover{transform:translateY(-4px)}
+.card::before{content:'';position:absolute;inset:0 0 auto 0;height:3px;background:linear-gradient(90deg,var(--acc),var(--acc2))}
+.card .lab{color:var(--mut);font-size:12.5px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase}
+.card .big{font-size:32px;font-weight:800;margin-top:6px}
+.card .sub{color:var(--mut);font-size:13.5px;margin-top:4px}
+.pos{color:var(--grn)}.neg{color:var(--red)}.gold{color:var(--gold)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--rad);padding:22px;box-shadow:var(--sh);margin:18px 0}
+.panel h2{font-size:20px;margin-bottom:6px}
+.panel .hint{color:var(--mut);font-size:14px;margin-bottom:14px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+@media(max-width:860px){.grid2{grid-template-columns:1fr}}
+canvas.chart{width:100%;height:240px;display:block}
+
+/* ---------- forms ---------- */
+.frow{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.fld{flex:1;min-width:150px}
+.fld label{display:block;font-size:12.5px;font-weight:700;color:var(--mut);letter-spacing:.6px;margin-bottom:5px;text-transform:uppercase}
+.fld input,.fld select,.fld textarea{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:10px 12px;outline:none;transition:.2s}
+.fld input:focus,.fld select:focus,.fld textarea:focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(76,201,240,.18)}
+.seg{display:flex;background:var(--panel2);border:1px solid var(--line);border-radius:11px;overflow:hidden}
+.seg button{flex:1;background:none;border:none;padding:10px;color:var(--mut);font-weight:700;cursor:pointer;transition:.2s}
+.seg button.on.inc{background:#0d3a26;color:var(--grn)}
+.seg button.on.exp{background:#3d1420;color:var(--red)}
+
+/* ---------- table ---------- */
+.twrap{overflow-x:auto;border-radius:12px;border:1px solid var(--line)}
+table{width:100%;border-collapse:collapse;font-size:14px;min-width:720px}
+th{background:var(--panel2);text-align:left;padding:11px 12px;color:var(--mut);font-size:12px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;user-select:none;white-space:nowrap}
+th:hover{color:var(--txt)}
+td{padding:10px 12px;border-top:1px solid var(--line);vertical-align:middle}
+tr:hover td{background:color-mix(in srgb,var(--panel2) 55%,transparent)}
+.amt{font-weight:700;text-align:right;font-variant-numeric:tabular-nums}
+.chip{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11.5px;font-weight:700;background:var(--panel2);border:1px solid var(--line)}
+.chip.biz-cfp{border-color:#2f9e6e;color:var(--grn)}
+.chip.biz-amw{border-color:#7b2ff7;color:#c39bff}
+.chip.biz-w2{border-color:#4cc9f0;color:var(--acc)}
+.chip.biz-per{border-color:#8fa3c8;color:var(--mut)}
+.iconbtn{background:none;border:1px solid var(--line);color:var(--mut);border-radius:8px;padding:4px 9px;cursor:pointer;transition:.15s}
+.iconbtn:hover{color:var(--txt);border-color:var(--acc)}
+.pager{display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:12px;color:var(--mut);font-size:13.5px}
+
+/* ---------- dropzone ---------- */
+.drop{border:2px dashed var(--line);border-radius:var(--rad);padding:34px;text-align:center;color:var(--mut);transition:.25s;cursor:pointer;background:var(--panel2)}
+.drop:hover,.drop.over{border-color:var(--acc);color:var(--txt);background:color-mix(in srgb,var(--acc) 8%,var(--panel2));transform:scale(1.01)}
+.drop .big{font-size:40px}
+
+/* ---------- FAB (scroll-aware pop-out) ---------- */
+#fab{position:fixed;right:24px;bottom:24px;z-index:120;width:60px;height:60px;border-radius:50%;border:none;cursor:pointer;
+  background:linear-gradient(135deg,var(--acc2),var(--acc));color:#fff;font-size:27px;box-shadow:0 12px 30px rgba(90,60,220,.5);
+  transform:scale(0) rotate(-90deg);transition:transform .45s cubic-bezier(.34,1.56,.64,1)}
+#fab.show{transform:scale(1) rotate(0)}
+#fab:hover{transform:scale(1.1) rotate(90deg)}
+#fabMenu{position:fixed;right:24px;bottom:96px;z-index:119;display:flex;flex-direction:column;gap:10px;align-items:flex-end;
+  opacity:0;pointer-events:none;transform:translateY(14px);transition:.3s}
+#fabMenu.open{opacity:1;pointer-events:auto;transform:none}
+#fabMenu button{background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:30px;padding:10px 18px;font-weight:700;cursor:pointer;box-shadow:var(--sh);transition:.2s}
+#fabMenu button:hover{border-color:var(--acc);transform:translateX(-4px)}
+
+/* ---------- modal / toast ---------- */
+#modalWrap{position:fixed;inset:0;z-index:200;background:rgba(4,8,18,.7);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;padding:18px}
+#modalWrap.on{display:flex}
+#modal{background:var(--panel);border:1px solid var(--line);border-radius:20px;max-width:640px;width:100%;max-height:88vh;overflow-y:auto;padding:26px;box-shadow:var(--sh);animation:pop .3s cubic-bezier(.34,1.4,.64,1)}
+@keyframes pop{from{transform:scale(.9);opacity:0}to{transform:scale(1);opacity:1}}
+#modal h3{font-size:20px;margin-bottom:14px}
+#toasts{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:300;display:flex;flex-direction:column;gap:8px;align-items:center}
+.toast{background:var(--panel);border:1px solid var(--acc);color:var(--txt);padding:11px 20px;border-radius:30px;font-weight:600;box-shadow:var(--sh);animation:tin .35s cubic-bezier(.34,1.4,.64,1)}
+@keyframes tin{from{transform:translateY(20px);opacity:0}to{transform:none;opacity:1}}
+.toast.out{opacity:0;transition:.4s}
+
+/* ---------- footer ---------- */
+footer{border-top:1px solid var(--line);background:var(--bg2);padding:44px 22px 30px;margin-top:30px}
+.fcols{max-width:1240px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:26px}
+.fcols h4{font-size:13px;letter-spacing:1.4px;text-transform:uppercase;color:var(--mut);margin-bottom:12px}
+.fcols a{display:block;color:var(--txt);text-decoration:none;padding:4px 0;opacity:.85;transition:.2s}
+.fcols a:hover{opacity:1;color:var(--acc);transform:translateX(4px)}
+.fbot{max-width:1240px;margin:30px auto 0;padding-top:18px;border-top:1px solid var(--line);color:var(--mut);font-size:13px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px}
+.kv{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px dashed var(--line);font-size:14.5px}
+.kv b{font-variant-numeric:tabular-nums}
+.prog{height:10px;background:var(--panel2);border-radius:6px;overflow:hidden;margin-top:8px}
+.prog i{display:block;height:100%;background:linear-gradient(90deg,var(--acc),var(--grn));border-radius:6px;transition:width .8s cubic-bezier(.2,.8,.25,1)}
+.empty{color:var(--mut);text-align:center;padding:26px;font-size:15px}
+@media(max-width:700px){.navlinks{display:none}.hero{padding-top:110px}}
+</style>
+</head>
+<body>
+<div id="bgfx"><div class="orb orb1"></div><div class="orb orb2"></div><div class="orb orb3"></div></div>
+<div id="gridfx"></div>
+
+<nav id="topnav">
+  <div class="logo">💎 N8Books<small>BOOKS WITHOUT THE BOOKKEEPER</small></div>
+  <div class="navlinks" id="navlinks">
+    <button data-page="dash" class="on">📊 Dashboard</button>
+    <button data-page="txns">🧾 Transactions</button>
+    <button data-page="import">📥 Import</button>
+    <button data-page="mileage">🚗 Mileage</button>
+    <button data-page="tax">🧮 Tax Center</button>
+    <button data-page="writeoffs">💸 Write-Offs</button>
+    <button data-page="people">👥 People</button>
+    <button data-page="invoices">🧾 Invoices</button>
+    <button data-page="taxhq">⏰ Tax HQ</button>
+    <button data-page="reports">📈 Reports</button>
+    <button data-page="settings">⚙️ Settings</button>
+  </div>
+  <div class="navright">
+    <select class="yrsel" id="yrSel" title="Tax year"></select>
+    <button class="themesw" id="themeBtn" title="Toggle dark / light">🌙</button>
+  </div>
+</nav>
+
+<header class="hero" id="hero">
+  <h1>Your money, <span class="grad">filed &amp; flawless.</span></h1>
+  <p>Upload every transaction. N8Books sorts income, expenses &amp; mileage into tax-ready categories — no subscription, no bookkeeper, no stress.</p>
+  <div class="cta">
+    <button class="btn" onclick="openAdd()">➕ Add Transaction</button>
+    <button class="btn ghost" onclick="go('import')">📥 Import Bank File</button>
+  </div>
+</header>
+
+<main id="app">
+  <section class="page on" id="page-dash"></section>
+  <section class="page" id="page-txns"></section>
+  <section class="page" id="page-import"></section>
+  <section class="page" id="page-mileage"></section>
+  <section class="page" id="page-tax"></section>
+  <section class="page" id="page-writeoffs"></section>
+  <section class="page" id="page-people"></section>
+  <section class="page" id="page-invoices"></section>
+  <section class="page" id="page-taxhq"></section>
+  <section class="page" id="page-reports"></section>
+  <section class="page" id="page-settings"></section>
+</main>
+
+<div id="fabMenu">
+  <button onclick="openAdd('income')">💰 Quick Income</button>
+  <button onclick="openAdd('expense')">🧾 Quick Expense</button>
+  <button onclick="openMileage()">🚗 Log Miles</button>
+  <button onclick="go('import')">📥 Import File</button>
+</div>
+<button id="fab" title="Quick add">➕</button>
+
+<div id="modalWrap"><div id="modal"></div></div>
+<div id="toasts"></div>
+
+<footer>
+  <div class="fcols">
+    <div>
+      <h4>🧮 Tax Resources</h4>
+      <a href="https://www.irs.gov/forms-pubs/about-schedule-c-form-1040" target="_blank" rel="noopener">IRS Schedule C Guide</a>
+      <a href="https://www.irs.gov/tax-professionals/standard-mileage-rates" target="_blank" rel="noopener">IRS Standard Mileage Rates</a>
+      <a href="https://www.irs.gov/businesses/small-businesses-self-employed/estimated-taxes" target="_blank" rel="noopener">Quarterly Estimated Taxes</a>
+      <a href="https://www.irs.gov/forms-pubs/about-form-1099-nec" target="_blank" rel="noopener">Form 1099-NEC Info</a>
+      <a href="https://marylandtaxes.gov" target="_blank" rel="noopener">Maryland Comptroller</a>
+    </div>
+    <div>
+      <h4>🏛️ Maryland Business</h4>
+      <a href="https://businessexpress.maryland.gov" target="_blank" rel="noopener">MD Business Express</a>
+      <a href="https://dat.maryland.gov" target="_blank" rel="noopener">SDAT (Entity Search)</a>
+      <a href="https://www.sba.gov" target="_blank" rel="noopener">U.S. Small Business Admin</a>
+      <a href="https://www.score.org" target="_blank" rel="noopener">SCORE Mentors (Free)</a>
+    </div>
+    <div>
+      <h4>⚡ Quick Actions</h4>
+      <a href="#" onclick="openAdd();return false">➕ Add Transaction</a>
+      <a href="#" onclick="go('import');return false">📥 Import Bank File</a>
+      <a href="#" onclick="go('tax');return false">🧮 Tax Center</a>
+      <a href="#" onclick="exportCSV();return false">⬇️ Export CSV</a>
+      <a href="#" onclick="backupJSON();return false">💾 Backup My Data</a>
+    </div>
+    <div>
+      <h4>💎 N8Books</h4>
+      <a href="#" onclick="go('settings');return false">⚙️ Settings &amp; Data</a>
+      <a href="#" onclick="seedDemo();return false">🎲 Load Demo Data</a>
+      <a href="#" onclick="go('reports');return false">📈 Reports &amp; Charts</a>
+      <p style="color:var(--mut);font-size:13.5px;margin-top:8px">Your data never leaves this browser. No accounts, no cloud, no monthly fee. Ever.</p>
+    </div>
+  </div>
+  <div class="fbot">
+    <span>💎 N8Books — built for Clark Family Projects LLC &amp; the Clark household.</span>
+    <span>Not tax advice — just flawless organization for your preparer. 🧾</span>
+  </div>
+</footer>
+<script>
+'use strict';
+/* ================= DATA ================= */
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const uid=()=>Math.random().toString(36).slice(2,10)+Date.now().toString(36);
+const fmt$=n=>{const v=Math.round(Math.abs(n)*100)/100;return (n<0?'-':'')+'$'+v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})};
+const fmtN=n=>Math.round(n).toLocaleString('en-US');
+const todayStr=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
+const yrOf=d=>+d.slice(0,4);
+
+const BIZ=[
+ {id:'cfp',n:'Clark Family Projects LLC',e:'🔧',cls:'biz-cfp'},
+ {id:'amw',n:'Amway / LTD (Jishawna IBO)',e:'💎',cls:'biz-amw'},
+ {id:'w2',n:'W-2 Wages',e:'🏭',cls:'biz-w2'},
+ {id:'per',n:'Personal / Household',e:'🏠',cls:'biz-per'},
+];
+const bizName=id=>(BIZ.find(b=>b.id===id)||BIZ[3]).n;
+/* Schedule C mapped categories: [id, label, type, scheduleC line] */
+const CATS=[
+ ['inc_sales','Sales & Services Income','income','Line 1 — Gross receipts'],
+ ['inc_w2','W-2 Wages','income','Form 1040 Line 1a'],
+ ['inc_1099','1099-NEC Income','income','Line 1 — Gross receipts'],
+ ['inc_other','Other Income','income','Line 6 — Other income'],
+ ['adv','Advertising & Marketing','expense','Line 8'],
+ ['veh','Vehicle / Mileage','expense','Line 9 / 44a'],
+ ['labor','Contract Labor','expense','Line 11'],
+ ['dep','Depreciation','expense','Line 13'],
+ ['ins','Insurance','expense','Line 15'],
+ ['int','Interest Paid','expense','Line 16'],
+ ['legal','Legal & Professional','expense','Line 17'],
+ ['office','Office Expenses','expense','Line 18'],
+ ['rent','Rent / Lease','expense','Line 20'],
+ ['repairs','Repairs & Maintenance','expense','Line 21'],
+ ['supplies','Materials & Supplies','expense','Line 22'],
+ ['taxlic','Taxes & Licenses','expense','Line 23'],
+ ['travel','Travel','expense','Line 24a'],
+ ['meals','Meals (50% deductible)','expense','Line 24b'],
+ ['util','Utilities & Phone','expense','Line 25'],
+ ['prod','Product Purchases / COGS','expense','Line 4 — Cost of goods'],
+ ['train','Training / Conferences','expense','Line 27a'],
+ ['fees','Bank & Platform Fees','expense','Line 27a'],
+ ['soft','Software & Subscriptions','expense','Line 27a'],
+ ['tools','Tools & Equipment','expense','Line 27a'],
+ ['ship','Shipping & Delivery','expense','Line 27a'],
+ ['donate','Charitable Donations','expense','Schedule A'],
+ ['other','Other Expense','expense','Line 27a'],
+];
+const catName=id=>(CATS.find(c=>c[0]===id)||['','Other','', ''])[1];
+const catLine=id=>(CATS.find(c=>c[0]===id)||['','','',''])[3];
+const MILEAGE_RATES={2023:0.655,2024:0.67,2025:0.70,2026:0.70};
+const METHODS=['Cash App','Venmo','Zelle','PayPal','Chime','Citizens Bank','Cash','Check','Card','Wisely','Other'];
+
+/* smart auto-categorization rules (learned from the Clark tax pipeline) */
+const RULES=[
+ [/randstad|wild\s?leaf|arc beverage|amazon|advantage workforce/i,'inc_w2','w2'],
+ [/amway|ltd\b|leadership team/i,null,null], // handled below
+ [/hendricks|crowder|morris|naishawn/i,'labor','cfp'],
+ [/home depot|lowes|lowe's|sherwin|paint|tile/i,'supplies','cfp'],
+ [/verizon|t-mobile|at&t|xfinity|comcast/i,'util',null],
+ [/irs|maryland|comptroller/i,'taxlic',null],
+ [/uber|lyft|doordash|grubhub/i,'meals','per'],
+ [/shell|exxon|bp\b|gas station|fuel/i,'veh',null],
+ [/google|microsoft|adobe|subscription|netflix|spotify/i,'soft',null],
+ [/insurance|geico|state farm|progressive/i,'ins',null],
+ [/interest|fee|overdraft|service charge/i,'fees',null],
+ [/hotel|airbnb|airline|flight/i,'travel',null],
+ [/donation|church|tithe|charity/i,'donate','per'],
+ [/rent|landlord/i,'rent','per'],
+ [/grocery|walmart|target|aldi|costco/i,'other','per'],
+];
+function autoCat(desc,amt){
+  const d=(desc||'').toLowerCase();
+  if(/amway|ltd\b/.test(d)){
+    if(amt>0)return {cat:'inc_1099',biz:'amw'};
+    if(/conference|ticket|summit|registration/.test(d))return {cat:'train',biz:'amw'};
+    return {cat:'prod',biz:'amw'};
+  }
+  for(const [re,cat,biz] of RULES){
+    if(re.test(d)){
+      if(amt>0&&(cat==='labor'||cat==='supplies'))return {cat:'inc_sales',biz:'cfp'};
+      return {cat:cat||(amt>0?'inc_other':'other'),biz:biz||(amt>0?'per':'cfp')};
+    }
+  }
+  return amt>0?{cat:'inc_other',biz:'per'}:{cat:'other',biz:'cfp'};
+}
+
+/* ================= STATE ================= */
+const KEY='n8books_v1';
+let DB={txns:[],mileage:[],customCats:[],settings:{theme:'dark'},people:[],invoices:[],docs:[],recurring:[],taxPayments:[]};
+function loadDB(){try{const raw=localStorage.getItem(KEY);if(raw)DB=Object.assign(DB,JSON.parse(raw));}catch(e){}}
+function saveDB(){try{localStorage.setItem(KEY,JSON.stringify(DB));}catch(e){toast('⚠️ Storage full — export a backup!')}}
+loadDB();
+DB.people=DB.people||[];DB.invoices=DB.invoices||[];DB.docs=DB.docs||[];DB.recurring=DB.recurring||[];DB.taxPayments=DB.taxPayments||[];
+const OWNERS=[['nathan','👨 Nathan'],['jishawna','👩 Jishawna'],['joint','👫 Joint']];
+const ownerName=o=>(OWNERS.find(x=>x[0]===(o||'joint'))||OWNERS[2])[1];
+const ownerForBiz=b=>b==='amw'?'jishawna':b==='w2'?'nathan':'joint';
+let curYear=+new Date().getFullYear();
+const yearTxns=()=>DB.txns.filter(t=>yrOf(t.date)===curYear);
+const yearMiles=()=>DB.mileage.filter(m=>yrOf(m.date)===curYear);
+
+/* ================= UI CORE ================= */
+function toast(msg){const t=document.createElement('div');t.className='toast';t.textContent=msg;$('#toasts').appendChild(t);setTimeout(()=>{t.classList.add('out');setTimeout(()=>t.remove(),450)},2800)}
+function go(page){
+  $$('#navlinks button').forEach(b=>b.classList.toggle('on',b.dataset.page===page));
+  $$('section.page').forEach(s=>s.classList.toggle('on',s.id==='page-'+page));
+  render(page);window.scrollTo({top:0,behavior:'smooth'});
+  $('#fabMenu').classList.remove('open');
+}
+function render(page){
+  if(page==='dash')renderDash();else if(page==='txns')renderTxns();
+  else if(page==='import')renderImport();else if(page==='mileage')renderMileage();
+  else if(page==='tax')renderTax();else if(page==='writeoffs')renderWriteoffs();else if(page==='reports')renderReports();
+  else if(page==='people')renderPeople();else if(page==='invoices')renderInvoices();else if(page==='taxhq')renderTaxHQ();
+  else if(page==='settings')renderSettings();
+}
+function openModal(html){$('#modal').innerHTML=html;$('#modalWrap').classList.add('on')}
+function closeModal(){$('#modalWrap').classList.remove('on')}
+$('#modalWrap').addEventListener('click',e=>{if(e.target.id==='modalWrap')closeModal()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();$('#fabMenu').classList.remove('open')}});
+
+/* nav + year + theme */
+$('#navlinks').addEventListener('click',e=>{const b=e.target.closest('button');if(b)go(b.dataset.page)});
+function fillYears(){
+  const yrs=new Set([curYear-1,curYear,curYear+1,...DB.txns.map(t=>yrOf(t.date)),...DB.mileage.map(m=>yrOf(m.date))]);
+  $('#yrSel').innerHTML=[...yrs].sort((a,b)=>b-a).map(y=>`<option value="${y}" ${y===curYear?'selected':''}>📅 ${y}</option>`).join('');
+}
+$('#yrSel').addEventListener('change',e=>{curYear=+e.target.value;render($$('#navlinks button').find(b=>b.classList.contains('on')).dataset.page)});
+function setTheme(t){DB.settings.theme=t;document.documentElement.dataset.theme=t;$('#themeBtn').textContent=t==='dark'?'🌙':'☀️';saveDB()}
+$('#themeBtn').addEventListener('click',()=>{setTheme(DB.settings.theme==='dark'?'light':'dark');toast(DB.settings.theme==='dark'?'🌙 Dark mode — home sweet home':'☀️ Light mode')});
+setTheme(DB.settings.theme||'dark');
+
+/* scroll fx: nav shadow, FAB pop-out, parallax orbs, reveal-on-scroll */
+const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting)e.target.classList.add('in')}),{threshold:.12});
+function watchReveals(){$$('.reveal:not(.in)').forEach(el=>io.observe(el))}
+addEventListener('scroll',()=>{
+  const y=scrollY;
+  $('#topnav').classList.toggle('scrolled',y>30);
+  $('#fab').classList.toggle('show',y>140);
+  document.querySelector('.orb1').style.transform=`translateY(${y*.18}px)`;
+  document.querySelector('.orb2').style.transform=`translateY(${-y*.12}px)`;
+  document.querySelector('.orb3').style.transform=`translate(${y*.05}px,${-y*.07}px)`;
+},{passive:true});
+$('#fab').addEventListener('click',()=>$('#fabMenu').classList.toggle('open'));
+
+/* animated counter */
+function countUp(el,to,prefix){
+  const t0=performance.now(),dur=900;
+  const step=t=>{const k=Math.min(1,(t-t0)/dur),e=1-Math.pow(1-k,3);
+    el.textContent=(prefix||'')+fmtN(to*e)+(k<1?'': (Math.abs(to%1)>.009?'':'')); 
+    if(k<1)requestAnimationFrame(step);else el.textContent=fmt$(to)};
+  requestAnimationFrame(step);
+}
+</script>
+<script>
+'use strict';
+/* ================= DASHBOARD ================= */
+function totals(list){
+  let inc=0,exp=0;for(const t of list){if(t.type==='income')inc+=t.amount;else exp+=t.amount}
+  return {inc,exp,net:inc-exp};
+}
+function renderDash(){
+  const tx=yearTxns(), T=totals(tx);
+  const now=new Date(), mKey=curYear+'-'+String(now.getMonth()+1).padStart(2,'0');
+  const mTx=tx.filter(t=>t.date.startsWith(mKey)), M=totals(mTx);
+  const miles=yearMiles().reduce((a,m)=>a+m.miles,0), rate=MILEAGE_RATES[curYear]||0.70, mileDed=miles*rate;
+  const q=Math.floor(now.getMonth()/3)+1;
+  const qTx=tx.filter(t=>yrOf(t.date)===curYear&&Math.floor((+t.date.slice(5,7)-1)/3)+1===q), Q=totals(qTx);
+  const byBiz=BIZ.map(b=>{const bt=totals(tx.filter(t=>t.biz===b.id));return {...b,...bt}});
+  const topCats={};tx.filter(t=>t.type==='expense').forEach(t=>topCats[t.cat]=(topCats[t.cat]||0)+t.amount);
+  const top=Object.entries(topCats).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const recent=[...tx].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,6);
+  const estTax=Math.max(0,T.net)*0.22;
+  $('#page-dash').innerHTML=`
+  <div class="cards">
+    <div class="card reveal"><div class="lab">💰 ${curYear} Income</div><div class="big pos" data-count="${T.inc}">$0</div><div class="sub">${tx.filter(t=>t.type==='income').length} income entries</div></div>
+    <div class="card reveal"><div class="lab">🧾 ${curYear} Expenses</div><div class="big neg" data-count="${T.exp}">$0</div><div class="sub">${tx.filter(t=>t.type==='expense').length} expense entries</div></div>
+    <div class="card reveal"><div class="lab">📈 Net Profit</div><div class="big ${T.net>=0?'pos':'neg'}" data-count="${T.net}">$0</div><div class="sub">Income minus expenses</div></div>
+    <div class="card reveal"><div class="lab">🧮 Est. Tax (rough 22%)</div><div class="big gold" data-count="${estTax}">$0</div><div class="sub">Set aside ~${fmt$(estTax/4)} / quarter</div></div>
+  </div>
+  <div class="grid2">
+    <div class="panel reveal"><h2>📊 Monthly Cash Flow</h2><p class="hint">Income vs expenses by month, ${curYear}</p><canvas class="chart" id="chFlow" width="560" height="240"></canvas></div>
+    <div class="panel reveal"><h2>🍩 Expense Breakdown</h2><p class="hint">Where the money went, ${curYear}</p><canvas class="chart" id="chDonut" width="560" height="240"></canvas></div>
+  </div>
+  <div class="cards">
+    <div class="card reveal"><div class="lab">🗓️ This Month</div><div class="big">${fmt$(M.net)}</div><div class="sub">In ${fmt$(M.inc)} · Out ${fmt$(M.exp)}</div></div>
+    <div class="card reveal"><div class="lab">📆 This Quarter (Q${q})</div><div class="big">${fmt$(Q.net)}</div><div class="sub">In ${fmt$(Q.inc)} · Out ${fmt$(Q.exp)}</div></div>
+    <div class="card reveal"><div class="lab">🚗 Mileage Deduction</div><div class="big gold">${fmt$(mileDed)}</div><div class="sub">${fmtN(miles)} mi × ${fmt$(rate)}/mi (${curYear} IRS rate)</div></div>
+    <div class="card reveal"><div class="lab">🧾 Total Entries</div><div class="big">${tx.length}</div><div class="sub">${DB.txns.length} all-time in the books</div></div>
+  </div>
+  <div class="grid2">
+    <div class="panel reveal"><h2>🏢 By Business</h2>${byBiz.map(b=>`
+      <div class="kv"><span>${b.e} ${b.n}</span><span>In <b class="pos">${fmt$(b.inc)}</b> · Out <b class="neg">${fmt$(b.exp)}</b> · Net <b>${fmt$(b.net)}</b></span></div>`).join('')}
+    </div>
+    <div class="panel reveal"><h2>🔥 Top Expense Categories</h2>
+      ${top.length?top.map(([c,v])=>`<div class="kv"><span>${catName(c)}</span><b>${fmt$(v)}</b></div><div class="prog"><i style="width:${T.exp?Math.round(v/T.exp*100):0}%"></i></div>`).join(''):'<p class="empty">No expenses yet this year.</p>'}
+    </div>
+  </div>
+  <div class="panel reveal"><h2>🕐 Recent Activity</h2>
+    ${recent.length?`<div class="twrap"><table><tr><th>Date</th><th>Description</th><th>Category</th><th>Business</th><th style="text-align:right">Amount</th></tr>
+    ${recent.map(t=>`<tr><td>${t.date}</td><td>${esc(t.desc)}</td><td><span class="chip">${catName(t.cat)}</span></td><td>${bizName(t.biz)}</td><td class="amt ${t.type==='income'?'pos':'neg'}">${t.type==='income'?'+':'-'}${fmt$(t.amount)}</td></tr>`).join('')}</table></div>`:'<p class="empty">Nothing yet — add your first transaction or import a bank file. 🚀</p>'}
+  </div>`;
+  $$('#page-dash [data-count]').forEach(el=>countUp(el,+el.dataset.count));
+  drawFlowChart($('#chFlow'),tx);drawDonut($('#chDonut'),top,T.exp);
+  watchReveals();
+}
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+
+/* charts (hand-rolled canvas, HiDPI) */
+function prep(cv){if(!cv)return null;const dpr=devicePixelRatio||1,r=cv.getBoundingClientRect();cv.width=r.width*dpr;cv.height=240*dpr;const c=cv.getContext('2d');c.scale(dpr,dpr);return [c,r.width,240]}
+const PALETTE=['#4cc9f0','#7b2ff7','#3ddc84','#ffd166','#ff5d7a','#f72585','#4cc9f0','#80ed99','#ff9f1c','#b388ff'];
+function drawFlowChart(cv,tx){
+  const p=prep(cv);if(!p)return;const [c,W,H]=p;
+  const mo=Array.from({length:12},()=>[0,0]);
+  tx.forEach(t=>{const m=+t.date.slice(5,7)-1;mo[m][t.type==='income'?0:1]+=t.amount});
+  const max=Math.max(1,...mo.flat());const bw=W/12;
+  c.font='11px Segoe UI';c.textAlign='center';
+  const MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  mo.forEach((v,i)=>{
+    const ih=v[0]/max*(H-50),eh=v[1]/max*(H-50),x=i*bw+bw*.18,w2=bw*.28;
+    c.fillStyle='#3ddc84';rr2(c,x,H-26-ih,w2,ih,4);c.fill();
+    c.fillStyle='#ff5d7a';rr2(c,x+w2+3,H-26-eh,w2,eh,4);c.fill();
+    c.fillStyle=getComputedStyle(document.body).getPropertyValue('--mut');c.fillText(MN[i],i*bw+bw/2,H-8);
+  });
+  c.fillStyle='#3ddc84';c.fillRect(8,6,10,10);c.fillStyle=getComputedStyle(document.body).getPropertyValue('--txt');c.textAlign='left';c.fillText('Income',22,15);
+  c.fillStyle='#ff5d7a';c.fillRect(80,6,10,10);c.fillStyle=getComputedStyle(document.body).getPropertyValue('--txt');c.fillText('Expenses',94,15);
+}
+function rr2(c,x,y,w,h,r){if(h<=0)return;c.beginPath();c.moveTo(x,y+h);c.lineTo(x,y+r);c.quadraticCurveTo(x,y,x+r,y);c.lineTo(x+w-r,y);c.quadraticCurveTo(x+w,y,x+w,y+r);c.lineTo(x+w,y+h);c.closePath()}
+function drawDonut(cv,top,totalExp){
+  const p=prep(cv);if(!p)return;const [c,W,H]=p;
+  if(!top.length){c.fillStyle=getComputedStyle(document.body).getPropertyValue('--mut');c.font='15px Segoe UI';c.textAlign='center';c.fillText('No expenses to chart yet',W/2,H/2);return}
+  const cx=W/2-90,cy=H/2,R=78,r2=48;let a=-Math.PI/2;
+  top.forEach(([cat,v],i)=>{const sw=v/totalExp*Math.PI*2;c.beginPath();c.arc(cx,cy,R,a,a+sw);c.arc(cx,cy,r2,a+sw,a,true);c.closePath();c.fillStyle=PALETTE[i%PALETTE.length];c.fill();a+=sw});
+  c.fillStyle=getComputedStyle(document.body).getPropertyValue('--txt');c.font='bold 15px Segoe UI';c.textAlign='center';c.fillText(fmtN(totalExp)+'',cx,cy-4);
+  c.font='11px Segoe UI';c.fillStyle=getComputedStyle(document.body).getPropertyValue('--mut');c.fillText('total spent',cx,cy+13);
+  c.textAlign='left';c.font='13px Segoe UI';
+  top.forEach(([cat,v],i)=>{const y=cy-((top.length-1)*13)+i*26;c.fillStyle=PALETTE[i%PALETTE.length];c.fillRect(cx+R+22,y-9,12,12);c.fillStyle=getComputedStyle(document.body).getPropertyValue('--txt');c.fillText(catName(cat)+' — '+Math.round(v/totalExp*100)+'%',cx+R+42,y+2)});
+}
+
+/* ================= ADD / EDIT TRANSACTION ================= */
+function txnForm(t,type,group){
+  const cats=CATS.filter(c=>c[2]===(t?t.type:type));
+  return `<h3>${t?'✏️ Edit':'➕ Add'} Transaction</h3>
+  <form id="txnForm">
+    <div class="frow"><div class="fld" style="flex:2"><label>Type</label>
+      <div class="seg"><button type="button" id="segInc" class="${(t?t.type:type)==='income'?'on inc':''}">💰 Income</button><button type="button" id="segExp" class="${(t?t.type:type)==='expense'?'on exp':''}">🧾 Expense</button></div></div>
+    <div class="fld"><label>Date</label><input type="date" id="fDate" required value="${t?t.date:todayStr()}"></div></div>
+    <div class="frow"><div class="fld" style="flex:2"><label>Description</label><input id="fDesc" required placeholder="e.g. Tile job deposit — Erika" value="${t?esc(t.desc):''}"></div>
+    <div class="fld"><label>Amount ($)</label><input id="fAmt" type="number" step="0.01" min="0" required placeholder="0.00" value="${t?t.amount:''}"></div></div>
+    <div class="frow"><div class="fld"><label>Category</label><select id="fCat">${cats.map(c=>`<option value="${c[0]}" ${t&&t.cat===c[0]?'selected':''}>${c[1]}</option>`).join('')}</select></div>
+    <div class="fld"><label>Business</label><select id="fBiz">${BIZ.map(b=>`<option value="${b.id}" ${t&&t.biz===b.id?'selected':''}>${b.e} ${b.n}</option>`).join('')}</select></div></div>
+    <div class="frow"><div class="fld"><label>Payment Method</label><select id="fMethod">${METHODS.map(m=>`<option ${t&&t.method===m?'selected':''}>${m}</option>`).join('')}</select></div>
+    <div class="fld"><label>Whose Name? (owner)</label><select id="fOwner">${OWNERS.map(o=>`<option value="${o[0]}" ${(t?(t.owner||'joint'):ownerForBiz('per'))===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></div>
+    <div class="fld" style="flex:2"><label>Note (optional)</label><input id="fNote" placeholder="Job name, invoice #, anything useful" value="${t?esc(t.note||''):''}"></div></div>
+    <div class="fld" style="margin-top:4px"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;color:var(--txt)"><input type="checkbox" id="fSplit" ${group?'checked':''} style="width:18px;height:18px"> ✂️ Split this across categories / businesses</label></div>
+    <div id="splitBox" style="display:${group?'block':'none'}">
+      <div id="splitRows">${(group||[]).map(s=>splitRowHTML(s)).join('')}</div>
+      <div style="display:flex;gap:10px;align-items:center;margin-top:6px">
+        <button type="button" class="btn ghost small" onclick="addSplitRow()">➕ Add Split Line</button>
+        <span id="splitSum" style="font-size:13px;color:var(--mut)"></span>
+      </div>
+      <p class="hint">e.g. one Home Depot run: paint → CFP Supplies, snacks → Personal, ladder → CFP Tools. Lines must add up to the total amount.</p>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">
+      ${t?`<button type="button" class="btn danger" onclick="delTxn('${t.id}')">🗑 Delete</button>`:''}
+      <button type="button" class="btn ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn">${t?'💾 Save':'➕ Add'}</button>
+    </div>
+  </form>`;
+}
+let formType='expense';
+function openAdd(type){formType=type||'expense';openModal(txnForm(null,formType));wireTxnForm(null)}
+function openEdit(id){const t=DB.txns.find(x=>x.id===id);if(!t)return;formType=t.type;const group=t.splitId?DB.txns.filter(x=>x.splitId===t.splitId):null;openModal(txnForm(t,null,group));wireTxnForm(t,group)}
+function wireTxnForm(t,group){
+  const segI=$('#segInc'),segE=$('#segExp');
+  const setType=ty=>{formType=ty;segI.className=ty==='income'?'on inc':'';segE.className=ty==='expense'?'on exp':'';
+    $('#fCat').innerHTML=CATS.filter(c=>c[2]===ty).map(c=>`<option value="${c[0]}">${c[1]}</option>`).join('')};
+  segI.onclick=()=>setType('income');segE.onclick=()=>setType('expense');
+  $('#fDesc').addEventListener('blur',()=>{
+    if(t)return;const a=autoCat($('#fDesc').value,formType==='income'?1:-1);
+    if(formType==='income'&&a.cat.startsWith('inc'))$('#fCat').value=a.cat;
+    if(a.biz){$('#fBiz').value=a.biz;$('#fOwner').value=ownerForBiz(a.biz)}
+  });
+  $('#fBiz').addEventListener('change',()=>{if(!t)$('#fOwner').value=ownerForBiz($('#fBiz').value)});
+  const splitChk=$('#fSplit');
+  if(splitChk){
+    splitChk.addEventListener('change',()=>{$('#splitBox').style.display=splitChk.checked?'block':'none';if(splitChk.checked&&!$('#splitRows').children.length){addSplitRow();addSplitRow()}updSplitSum()});
+    $$('#splitRows .sAmt').forEach(i=>i.addEventListener('input',updSplitSum));
+    updSplitSum();
+  }
+  $('#txnForm').addEventListener('submit',e=>{
+    e.preventDefault();
+    const amt=Math.abs(parseFloat($('#fAmt').value)||0);if(!amt){toast('Enter an amount');return}
+    const base={date:$('#fDate').value,desc:$('#fDesc').value.trim(),type:formType,method:$('#fMethod').value};
+    if(splitChk&&splitChk.checked){
+      const rows=$$('#splitRows .splitrow').map(r=>({amount:Math.abs(parseFloat(r.querySelector('.sAmt').value)||0),cat:r.querySelector('.sCat').value,biz:r.querySelector('.sBiz').value,owner:r.querySelector('.sOwner').value,note:r.querySelector('.sNote').value.trim()})).filter(r=>r.amount>0);
+      const sum=rows.reduce((a,r)=>a+r.amount,0);
+      if(rows.length<2){toast('✂️ A split needs at least 2 lines');return}
+      if(Math.abs(sum-amt)>0.011){toast('✂️ Split lines add to '+fmt$(sum)+' but the total is '+fmt$(amt)+' — make them match');return}
+      const sid=(group&&group.length)?group[0].splitId:uid();
+      if(group&&group.length)DB.txns=DB.txns.filter(x=>x.splitId!==sid);
+      else if(t)DB.txns=DB.txns.filter(x=>x.id!==t.id);
+      rows.forEach(r=>{const nt={id:uid(),...base,amount:r.amount,cat:r.cat,biz:r.biz,owner:r.owner,note:r.note||$('#fNote').value.trim(),src:'manual',splitId:sid};nt.sig=txnSig(nt);DB.txns.push(nt)});
+      saveDB();fillYears();closeModal();toast('✂️ Split saved — '+rows.length+' lines!');render(currentPage());return;
+    }
+    const data={...base,amount:amt,cat:$('#fCat').value,biz:$('#fBiz').value,note:$('#fNote').value.trim(),owner:$('#fOwner').value};
+    if(t){Object.assign(t,data);t.sig=txnSig(t)}else{const nt={id:uid(),...data,src:'manual'};nt.sig=txnSig(nt);DB.txns.push(nt)}
+    saveDB();fillYears();closeModal();toast(t?'💾 Saved!':'✅ Added!');render(currentPage());
+  });
+}
+function delTxn(id){const t=DB.txns.find(x=>x.id===id);if(t&&t.splitId){DB.txns=DB.txns.filter(x=>x.splitId!==t.splitId);toast('🗑 Whole split deleted')}else{DB.txns=DB.txns.filter(x=>x.id!==id);toast('🗑 Deleted')}saveDB();closeModal();render(currentPage())}
+function currentPage(){const b=$$('#navlinks button').find(x=>x.classList.contains('on'));return b?b.dataset.page:'dash'}
+
+/* ================= TRANSACTIONS PAGE ================= */
+let txFilter={q:'',biz:'all',cat:'all',type:'all',owner:'all',sort:'date',dir:-1,page:0};
+function renderTxns(){
+  const all=yearTxns();
+  let list=all.filter(t=>(txFilter.biz==='all'||t.biz===txFilter.biz)&&(txFilter.cat==='all'||t.cat===txFilter.cat)&&(txFilter.type==='all'||t.type===txFilter.type)&&(txFilter.owner==='all'||(t.owner||'joint')===txFilter.owner)&&(!txFilter.q||(t.desc+' '+t.note+' '+catName(t.cat)).toLowerCase().includes(txFilter.q)));
+  list.sort((a,b)=>{const k=txFilter.sort;let r=k==='amount'?a.amount-b.amount:a[k].localeCompare(b[k]);return r*txFilter.dir});
+  const PER=15,pages=Math.max(1,Math.ceil(list.length/PER));txFilter.page=Math.min(txFilter.page,pages-1);
+  const page=list.slice(txFilter.page*PER,txFilter.page*PER+PER);
+  const T=totals(list);
+  $('#page-txns').innerHTML=`
+  <div class="panel reveal in"><h2>🧾 Transactions — ${curYear}</h2><p class="hint">${list.length} shown · In ${fmt$(T.inc)} · Out ${fmt$(T.exp)} · Net ${fmt$(T.net)}</p>
+    <div class="frow">
+      <div class="fld" style="flex:2"><label>Search</label><input id="txQ" placeholder="Search descriptions…" value="${esc(txFilter.q)}"></div>
+      <div class="fld"><label>Business</label><select id="txBiz"><option value="all">All businesses</option>${BIZ.map(b=>`<option value="${b.id}" ${txFilter.biz===b.id?'selected':''}>${b.e} ${b.n}</option>`).join('')}</select></div>
+      <div class="fld"><label>Category</label><select id="txCat"><option value="all">All categories</option>${CATS.map(c=>`<option value="${c[0]}" ${txFilter.cat===c[0]?'selected':''}>${c[1]}</option>`).join('')}</select></div>
+      <div class="fld"><label>Type</label><select id="txType"><option value="all">All</option><option value="income" ${txFilter.type==='income'?'selected':''}>Income</option><option value="expense" ${txFilter.type==='expense'?'selected':''}>Expense</option></select></div>
+      <div class="fld"><label>Owner</label><select id="txOwner"><option value="all">Everyone</option>${OWNERS.map(o=>`<option value="${o[0]}" ${txFilter.owner===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></div>
+      <div class="fld" style="flex:0"><label>&nbsp;</label><button class="btn" onclick="openAdd()">➕ Add</button></div>
+    </div>
+    ${page.length?`<div class="twrap"><table><tr>
+      ${[['date','Date'],['desc','Description'],['cat','Category'],['biz','Business'],['method','Method'],['amount','Amount']].map(([k,l])=>`<th onclick="sortTx('${k}')">${l}${txFilter.sort===k?(txFilter.dir===1?' ↑':' ↓'):''}</th>`).join('')}<th></th></tr>
+      ${page.map(t=>`<tr><td style="white-space:nowrap">${t.date}</td><td>${esc(t.desc)}${t.note?`<div style="color:var(--mut);font-size:12px">${esc(t.note)}</div>`:''}</td>
+      <td><span class="chip">${catName(t.cat)}</span>${t.splitId?' <span class="chip" title="Part of a split transaction">✂️ split</span>':''}</td><td><span class="chip ${(BIZ.find(b=>b.id===t.biz)||{}).cls||''}">${bizName(t.biz)}</span> <span class="chip">${ownerName(t.owner)}</span></td>
+      <td>${esc(t.method||'')}</td><td class="amt ${t.type==='income'?'pos':'neg'}">${t.type==='income'?'+':'-'}${fmt$(t.amount)}</td>
+      <td><button class="iconbtn" onclick="openEdit('${t.id}')">✏️</button></td></tr>`).join('')}
+    </table></div>
+    <div class="pager"><button class="btn ghost small" ${txFilter.page===0?'disabled':''} onclick="txPage(-1)">← Prev</button> Page ${txFilter.page+1} of ${pages} <button class="btn ghost small" ${txFilter.page>=pages-1?'disabled':''} onclick="txPage(1)">Next →</button></div>`
+    :'<p class="empty">No transactions match. Try clearing filters — or import a bank file to fill this up. 📥</p>'}
+  </div>`;
+  $('#txQ').addEventListener('input',e=>{txFilter.q=e.target.value.toLowerCase();txFilter.page=0;renderTxnsSoft()});
+  $('#txBiz').addEventListener('change',e=>{txFilter.biz=e.target.value;txFilter.page=0;renderTxns()});
+  $('#txCat').addEventListener('change',e=>{txFilter.cat=e.target.value;txFilter.page=0;renderTxns()});
+  $('#txType').addEventListener('change',e=>{txFilter.type=e.target.value;txFilter.page=0;renderTxns()});
+  $('#txOwner').addEventListener('change',e=>{txFilter.owner=e.target.value;txFilter.page=0;renderTxns()});
+}
+function renderTxnsSoft(){const keep=document.activeElement;renderTxns();const q=$('#txQ');if(q){q.focus();q.setSelectionRange(q.value.length,q.value.length)}}
+function sortTx(k){if(txFilter.sort===k)txFilter.dir*=-1;else{txFilter.sort=k;txFilter.dir=1}renderTxns()}
+function txPage(d){txFilter.page+=d;renderTxns()}
+</script>
+<script>
+'use strict';
+/* ================= IMPORT ================= */
+let pendingImport=[];
+function renderImport(){
+  $('#page-import').innerHTML=`
+  <div class="panel reveal in"><h2>📥 Import Transactions</h2>
+    <p class="hint">Drop a bank CSV export (Cash App, Chime, Citizens, PayPal, Wisely…) — N8Books detects the columns, auto-categorizes with your rules, and lets you review before anything is saved. JSON backups from N8Books also work.</p>
+    <div class="frow"><div class="fld"><label>Bank format</label><select id="impPreset"><option value="auto">🔍 Auto-detect</option><option value="cashapp">Cash App</option><option value="chime">Chime</option><option value="citizens">Citizens Bank</option><option value="wisely">Wisely</option><option value="generic">Generic CSV</option></select></div>
+    <div class="fld" style="flex:2"><label>&nbsp;</label><p class="hint" style="margin:0">Duplicates are caught by signature hash (date + description + amount) and unchecked automatically — re-importing the same statement is safe. 🔒</p></div></div>
+    <div class="drop" id="dropZone"><div class="big">📂</div><b>Drop your file here</b> or click to browse<br><span style="font-size:13px">CSV or JSON · stays on this device</span>
+      <input type="file" id="fileIn" accept=".csv,.json,text/csv,application/json" hidden></div>
+    <div id="importPrev"></div>
+  </div>
+  <div class="panel reveal in"><h2>✍️ Bulk Paste</h2><p class="hint">Paste rows straight from a spreadsheet or bank page — one per line: <b>date, description, amount</b> (tabs or commas both fine).</p>
+    <div class="fld"><textarea id="pasteBox" rows="5" placeholder="2026-01-05, Home Depot — paint &amp; supplies, -84.20&#10;2026-01-06, Tile job deposit, 500.00"></textarea></div>
+    <button class="btn" onclick="parsePaste()">🔍 Preview Paste</button>
+  </div>`;
+  const dz=$('#dropZone'),fi=$('#fileIn');
+  dz.addEventListener('click',()=>fi.click());
+  dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('over')});
+  dz.addEventListener('dragleave',()=>dz.classList.remove('over'));
+  dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('over');if(e.dataTransfer.files[0])readFile(e.dataTransfer.files[0])});
+  fi.addEventListener('change',()=>{if(fi.files[0])readFile(fi.files[0])});
+  watchReveals();
+}
+function readFile(f){
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      if(f.name.toLowerCase().endsWith('.json')){
+        const data=JSON.parse(r.result);
+        if(data.txns){DB.txns=data.txns;DB.mileage=data.mileage||DB.mileage;saveDB();fillYears();toast('💾 Backup restored!');go('dash');return}
+        throw new Error('Not an N8Books backup');
+      }
+      window._importName=f.name;window._importPreset=($('#impPreset')||{}).value||'auto';
+      pendingImport=parseCSV(r.result);
+      markDupes(pendingImport);
+      showImportPreview(f.name);
+    }catch(err){toast('⚠️ Could not read that file: '+err.message)}
+  };
+  r.readAsText(f);
+}
+function splitCSVLine(line){
+  const out=[];let cur='',q=false;
+  for(let i=0;i<line.length;i++){const ch=line[i];
+    if(q){if(ch==='"'){if(line[i+1]==='"'){cur+='"';i++}else q=false}else cur+=ch}
+    else if(ch==='"')q=true;else if(ch===','){out.push(cur);cur=''}else cur+=ch}
+  out.push(cur);return out.map(s=>s.trim());
+}
+function parseCSV(text){
+  const lines=text.split(/\r?\n/).filter(l=>l.trim());
+  if(!lines.length)return [];
+  const head=splitCSVLine(lines[0]).map(h=>h.toLowerCase());
+  const find=(...names)=>head.findIndex(h=>names.some(n=>h.includes(n)));
+  let di=find('date'),de=find('description','desc','name','memo','transaction','details','payee'),am=find('amount','amt'),dr=find('debit','withdrawal'),cr=find('credit','deposit');
+  let de2=-1;
+  const _pw=window._importPreset||'auto';
+  const _preset=_pw==='generic'?null:detectPreset(head,_pw==='auto'?(window._importName||''):_pw);
+  if(_preset){if(_preset.di!=null&&_preset.di>=0)di=_preset.di;if(_preset.de!=null&&_preset.de>=0)de=_preset.de;if(_preset.de2!=null&&_preset.de2>=0)de2=_preset.de2;if(_preset.am!=null&&_preset.am>=0)am=_preset.am;window._detectedPreset=_preset.name}else window._detectedPreset='';
+  const rows=[];
+  const start=(di>=0||de>=0||am>=0)?1:0;
+  for(let i=start;i<lines.length;i++){
+    const c=splitCSVLine(lines[i]);
+    let date=di>=0?c[di]:'',desc=de>=0?c[de]:c[1]||'',amt=NaN;
+    if(de2>=0&&c[de2]&&c[de2]!==desc)desc=(desc?desc+' — ':'')+c[de2];
+    if(am>=0)amt=parseMoney(c[am]);
+    if(isNaN(amt)&&dr>=0&&cr>=0){const d=parseMoney(c[dr]),k=parseMoney(c[cr]);amt=!isNaN(k)?k:(!isNaN(d)?-d:NaN)}
+    if(isNaN(amt)){for(const cell of c){const v=parseMoney(cell);if(!isNaN(v)){amt=v;break}}}
+    date=normDate(date)||guessDate(c);
+    if(!date||!desc||isNaN(amt)||amt===0)continue;
+    rows.push(mkImportRow(date,desc,amt));
+  }
+  return rows;
+}
+function parseMoney(s){if(s==null)return NaN;s=String(s).replace(/[$,\s]/g,'');if(/^\(.*\)$/.test(s))s='-'+s.slice(1,-1);const v=parseFloat(s);return isNaN(v)?NaN:v}
+function normDate(s){
+  if(!s)return '';s=String(s).trim();
+  let m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);if(m)return m[1]+'-'+m[2].padStart(2,'0')+'-'+m[3].padStart(2,'0');
+  m=s.match(/^(\d{1,2})[\/](\d{1,2})[\/](\d{2,4})/);if(m){let y=+m[3];if(y<100)y+=2000;return y+'-'+m[1].padStart(2,'0')+'-'+m[2].padStart(2,'0')}
+  return '';
+}
+function guessDate(cells){for(const c of cells){const d=normDate(c);if(d)return d}return ''}
+function mkImportRow(date,desc,amt){
+  const a=autoCat(desc,amt);
+  return {date,desc,amount:Math.abs(amt),type:amt>=0?'income':'expense',cat:a.cat,biz:a.biz,owner:ownerForBiz(a.biz),keep:true};
+}
+function parsePaste(){
+  const txt=$('#pasteBox').value.trim();if(!txt){toast('Paste something first');return}
+  pendingImport=[];
+  for(const line of txt.split(/\r?\n/)){
+    if(!line.trim())continue;
+    const parts=line.split(/\t|,(?![^"]*")/).map(s=>s.replace(/^"|"$/g,'').trim());
+    if(parts.length<3)continue;
+    const date=normDate(parts[0]),amt=parseMoney(parts[parts.length-1]),desc=parts.slice(1,-1).join(', ');
+    if(date&&desc&&!isNaN(amt)&&amt!==0)pendingImport.push(mkImportRow(date,desc,amt));
+  }
+  markDupes(pendingImport);
+  showImportPreview('pasted rows');
+}
+function showImportPreview(srcName){
+  if(!pendingImport.length){toast('⚠️ No usable rows found in that file');return}
+  const inc=pendingImport.filter(r=>r.type==='income').length;
+  $('#importPrev').innerHTML=`
+  <div class="panel" style="margin-top:18px"><h2>👀 Review Import — ${esc(srcName)}</h2>
+    <p class="hint">${pendingImport.length} rows found (${inc} income · ${pendingImport.length-inc} expenses)${window._detectedPreset?` · 📇 Format: <b>${window._detectedPreset}</b>`:''}${pendingImport.some(r=>r.dupe)?` · ⚠️ <b>${pendingImport.filter(r=>r.dupe).length} possible duplicate(s)</b> — unchecked automatically`:''}. Auto-categorized — uncheck anything you don't want, fix categories inline, then import.</p>
+    <div class="twrap" style="max-height:380px;overflow-y:auto"><table><tr><th>✔</th><th>Date</th><th>Description</th><th>Type</th><th>Category</th><th>Business</th><th style="text-align:right">Amount</th></tr>
+    ${pendingImport.map((r,i)=>`<tr ${r.dupe?'style="opacity:.55"':''}>
+      <td><input type="checkbox" ${r.keep?'checked':''} onchange="pendingImport[${i}].keep=this.checked"></td>
+      <td style="white-space:nowrap">${r.date}</td><td>${esc(r.desc)}${r.dupe?' <span class="chip" style="border-color:var(--gold);color:var(--gold)">⚠️ duplicate?</span>':''}</td>
+      <td><select onchange="pendingImport[${i}].type=this.value;showImportPreview('${esc(srcName)}')"><option value="income" ${r.type==='income'?'selected':''}>Income</option><option value="expense" ${r.type==='expense'?'selected':''}>Expense</option></select></td>
+      <td><select onchange="pendingImport[${i}].cat=this.value">${CATS.filter(c=>c[2]===r.type).map(c=>`<option value="${c[0]}" ${r.cat===c[0]?'selected':''}>${c[1]}</option>`).join('')}</select></td>
+      <td><select onchange="pendingImport[${i}].biz=this.value">${BIZ.map(b=>`<option value="${b.id}" ${r.biz===b.id?'selected':''}>${b.n}</option>`).join('')}</select></td>
+      <td class="amt ${r.type==='income'?'pos':'neg'}">${r.type==='income'?'+':'-'}${fmt$(r.amount)}</td></tr>`).join('')}
+    </table></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+      <button class="btn ghost" onclick="pendingImport=[];renderImport()">Discard</button>
+      <button class="btn" onclick="commitImport()">✅ Import ${pendingImport.filter(r=>r.keep).length} Rows</button>
+    </div></div>`;
+  $('#importPrev').scrollIntoView({behavior:'smooth'});
+}
+function commitImport(){
+  const keep=pendingImport.filter(r=>r.keep);
+  keep.forEach(r=>{const nt={id:uid(),date:r.date,desc:r.desc,amount:r.amount,type:r.type,cat:r.cat,biz:r.biz,method:'Other',note:'',src:'import',owner:r.owner||ownerForBiz(r.biz)};nt.sig=txnSig(nt);DB.txns.push(nt)});
+  const skipped=pendingImport.filter(r=>r.dupe&&!r.keep).length;
+  pendingImport=[];saveDB();fillYears();toast(`🎉 Imported ${keep.length} transactions!${skipped?` (${skipped} duplicate${skipped===1?'':'s'} skipped)`:''}`);go('txns');
+}
+
+/* ================= MILEAGE ================= */
+function renderMileage(){
+  const ms=yearMiles().sort((a,b)=>b.date.localeCompare(a.date));
+  const tot=ms.reduce((a,m)=>a+m.miles,0),rate=MILEAGE_RATES[curYear]||0.70;
+  $('#page-mileage').innerHTML=`
+  <div class="cards">
+    <div class="card reveal in"><div class="lab">🚗 ${curYear} Miles</div><div class="big">${fmtN(tot)}</div><div class="sub">business miles logged</div></div>
+    <div class="card reveal in"><div class="lab">💸 Deduction Value</div><div class="big gold">${fmt$(tot*rate)}</div><div class="sub">at the ${curYear} IRS rate of ${fmt$(rate)}/mi</div></div>
+    <div class="card reveal in"><div class="lab">🧮 Rate Table</div><div class="sub" style="font-size:14px;margin-top:8px">${Object.entries(MILEAGE_RATES).map(([y,r])=>`${y}: $${r.toFixed(3)}/mi`).join('<br>')}</div></div>
+  </div>
+  <div class="panel reveal in"><h2>🛣️ Mileage Log</h2><p class="hint">The IRS wants date, miles, and business purpose. This log is exactly that.</p>
+    <button class="btn" onclick="openMileage()">➕ Log a Trip</button>
+    ${ms.length?`<div class="twrap" style="margin-top:14px"><table><tr><th>Date</th><th>Purpose / Route</th><th>Business</th><th style="text-align:right">Miles</th><th style="text-align:right">Value</th><th></th></tr>
+    ${ms.map(m=>`<tr><td>${m.date}</td><td>${esc(m.purpose)}</td><td>${bizName(m.biz)}</td><td class="amt">${m.miles}</td><td class="amt gold">${fmt$(m.miles*(MILEAGE_RATES[yrOf(m.date)]||0.7))}</td>
+    <td><button class="iconbtn" onclick="delMile('${m.id}')">🗑</button></td></tr>`).join('')}</table></div>`:'<p class="empty">No trips logged for '+curYear+' yet.</p>'}
+  </div>`;
+  watchReveals();
+}
+function openMileage(){
+  openModal(`<h3>🚗 Log a Trip</h3><form id="mileForm">
+    <div class="frow"><div class="fld"><label>Date</label><input type="date" id="mDate" required value="${todayStr()}"></div>
+    <div class="fld"><label>Miles</label><input type="number" id="mMiles" step="0.1" min="0" required placeholder="e.g. 42"></div></div>
+    <div class="frow"><div class="fld" style="flex:2"><label>Purpose / Route</label><input id="mPurpose" required placeholder="e.g. Home → Home Depot → tile job (Erika)"></div>
+    <div class="fld"><label>Business</label><select id="mBiz">${BIZ.map(b=>`<option value="${b.id}">${b.e} ${b.n}</option>`).join('')}</select></div></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn">💾 Save Trip</button></div>
+  </form>`);
+  $('#mileForm').addEventListener('submit',e=>{e.preventDefault();
+    DB.mileage.push({id:uid(),date:$('#mDate').value,miles:parseFloat($('#mMiles').value)||0,purpose:$('#mPurpose').value.trim(),biz:$('#mBiz').value});
+    saveDB();fillYears();closeModal();toast('🚗 Trip logged!');render(currentPage())});
+}
+function delMile(id){DB.mileage=DB.mileage.filter(m=>m.id!==id);saveDB();toast('🗑 Deleted');renderMileage()}
+
+/* ================= TAX CENTER ================= */
+function renderTax(){
+  const tx=yearTxns();
+  const sections=BIZ.map(b=>{
+    const bt=tx.filter(t=>t.biz===b.id),T=totals(bt);
+    const cats={};bt.filter(t=>t.type==='expense').forEach(t=>cats[t.cat]=(cats[t.cat]||0)+t.amount);
+    const miles=yearMiles().filter(m=>m.biz===b.id).reduce((a,m)=>a+m.miles,0);
+    return {b,T,cats,miles,mileDed:miles*(MILEAGE_RATES[curYear]||0.7)};
+  });
+  const totalNet=sections.reduce((a,s)=>a+s.T.net-s.mileDed,0)+sections.reduce((a,s)=>a+s.mileDed,0);
+  const allT=totals(tx);
+  const qEst=[0.25,0.5,0.75,1].map(f=>Math.max(0,allT.net)*0.22*f);
+  $('#page-tax').innerHTML=`
+  <div class="panel reveal in"><h2>🧮 Tax Center — ${curYear}</h2>
+    <p class="hint">Everything your preparer needs, organized by business and mapped to Schedule C lines. This is the one-sheet, always up to date.</p>
+    <div class="cards">
+      <div class="card"><div class="lab">Total Income</div><div class="big pos">${fmt$(allT.inc)}</div></div>
+      <div class="card"><div class="lab">Total Expenses</div><div class="big neg">${fmt$(allT.exp)}</div></div>
+      <div class="card"><div class="lab">Combined Net</div><div class="big">${fmt$(allT.net)}</div></div>
+      <div class="card"><div class="lab">Rough Tax Set-Aside (22%)</div><div class="big gold">${fmt$(Math.max(0,allT.net)*0.22)}</div><div class="sub">Q1 ${fmt$(qEst[0])} · Q2 ${fmt$(qEst[1])} · Q3 ${fmt$(qEst[2])} · Q4 ${fmt$(qEst[3])} cumulative</div></div>
+    </div>
+    ${sections.map(s=>`<div class="panel" style="margin-top:16px"><h2>${s.b.e} ${s.b.n}</h2>
+      <div class="kv"><span>Income</span><b class="pos">${fmt$(s.T.inc)}</b></div>
+      ${Object.entries(s.cats).sort((a,b)=>b[1]-a[1]).map(([c,v])=>`<div class="kv"><span>${catName(c)} <span class="chip">${catLine(c)}</span></span><b class="neg">-${fmt$(v)}</b></div>`).join('')}
+      ${s.miles?`<div class="kv"><span>Vehicle / Mileage <span class="chip">Line 44a</span> — ${fmtN(s.miles)} mi</span><b class="neg">-${fmt$(s.mileDed)}</b></div>`:''}
+      <div class="kv" style="border-bottom:none;font-size:17px"><span><b>Net</b></span><b class="${s.T.net-s.mileDed>=0?'pos':'neg'}">${fmt$(s.T.net-s.mileDed)}</b></div>
+    </div>`).join('')}
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px">
+      <button class="btn" onclick="window.print()">🖨️ Print Tax Summary</button>
+      <button class="btn ghost" onclick="exportCSV()">⬇️ Export ${curYear} CSV</button>
+      <button class="btn ghost" onclick="backupJSON()">💾 Backup All Data (JSON)</button>
+    </div>
+    <p class="hint" style="margin-top:14px">📌 Hand this page (printed) plus your W-2s and 1099s to your preparer and you're done. N8Books organizes — it doesn't file or give tax advice.</p>
+  </div>`;
+  const ownRows=OWNERS.map(([o])=>{const ot=totals(tx.filter(t=>(t.owner||'joint')===o));return `<div class="kv"><span>${ownerName(o)}</span><span>In <b class="pos">${fmt$(ot.inc)}</b> · Out <b class="neg">${fmt$(ot.exp)}</b> · Net <b>${fmt$(ot.net)}</b></span></div>`}).join('');
+  $('#page-tax').insertAdjacentHTML('beforeend',`<div class="panel reveal in"><h2>👫 By Owner — ${curYear}</h2><p class="hint">Whose name each dollar sits under for the joint return. Amway IBO money is Jishawna's Schedule C.</p>${ownRows}</div>`);
+  watchReveals();
+}
+function exportCSV(){
+  const tx=yearTxns().sort((a,b)=>a.date.localeCompare(b.date));
+  const rows=[['Date','Description','Type','Category','Schedule C Line','Business','Method','Amount','Note']];
+  tx.forEach(t=>rows.push([t.date,t.desc,t.type,catName(t.cat),catLine(t.cat),bizName(t.biz),t.method||'',(t.type==='income'?t.amount:-t.amount).toFixed(2),t.note||'']));
+  yearMiles().forEach(m=>rows.push([m.date,'Mileage: '+m.purpose,'mileage','Vehicle / Mileage','Line 44a',bizName(m.biz),'',m.miles+' mi @ $'+(MILEAGE_RATES[curYear]||0.7),'']));
+  download('n8books-'+curYear+'.csv',rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(',')).join('\n'),'text/csv');
+  toast('⬇️ CSV exported!');
+}
+function backupJSON(){download('n8books-backup.json',JSON.stringify(DB,null,2),'application/json');toast('💾 Backup downloaded!')}
+function download(name,content,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([content],{type}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000)}
+</script>
+<script>
+'use strict';
+/* ================= REPORTS ================= */
+function renderReports(){
+  const tx=yearTxns(),T=totals(tx);
+  const byBiz=BIZ.map(b=>({...b,...totals(tx.filter(t=>t.biz===b.id))}));
+  const byCat={};tx.forEach(t=>{const k=catName(t.cat);byCat[k]=byCat[k]||{inc:0,exp:0};byCat[k][t.type==='income'?'inc':'exp']+=t.amount});
+  const months=Array.from({length:12},(_,i)=>{const mk=curYear+'-'+String(i+1).padStart(2,'0');return totals(tx.filter(t=>t.date.startsWith(mk)))});
+  const best=months.reduce((bi,m,i)=>m.net>months[bi].net?i:bi,0);
+  const growth=(()=>{const h1=months.slice(0,6).reduce((a,m)=>a+m.net,0),h2=months.slice(6).reduce((a,m)=>a+m.net,0);return {h1,h2}})();
+  $('#page-reports').innerHTML=`
+  <div class="panel reveal in"><h2>📈 Reports — ${curYear}</h2><p class="hint">The year at a glance. Click any month row for its transactions.</p>
+    <div class="twrap"><table><tr><th>Month</th><th style="text-align:right">Income</th><th style="text-align:right">Expenses</th><th style="text-align:right">Net</th><th style="text-align:right">Running Net</th></tr>
+    ${(()=>{let run=0;return months.map((m,i)=>{run+=m.net;return `<tr style="cursor:pointer" onclick="monthJump(${i})"><td>${['January','February','March','April','May','June','July','August','September','October','November','December'][i]}${i===best&&m.net>0?' ⭐':''}</td><td class="amt pos">${fmt$(m.inc)}</td><td class="amt neg">${fmt$(m.exp)}</td><td class="amt">${fmt$(m.net)}</td><td class="amt">${fmt$(run)}</td></tr>`}).join('')})()}
+    <tr><td><b>YEAR</b></td><td class="amt pos"><b>${fmt$(T.inc)}</b></td><td class="amt neg"><b>${fmt$(T.exp)}</b></td><td class="amt"><b>${fmt$(T.net)}</b></td><td></td></tr>
+    </table></div>
+    <div class="kv" style="margin-top:10px"><span>First half net</span><b>${fmt$(growth.h1)}</b></div>
+    <div class="kv"><span>Second half net</span><b>${fmt$(growth.h2)}</b></div>
+  </div>
+  <div class="grid2">
+    <div class="panel reveal in"><h2>🏢 Business Scoreboard</h2>
+      ${byBiz.map(b=>`<div class="kv"><span>${b.e} ${b.n}</span><b class="${b.net>=0?'pos':'neg'}">${fmt$(b.net)}</b></div><div class="prog"><i style="width:${Math.min(100,Math.abs(b.net)/Math.max(1,Math.abs(T.net))*100)}%"></i></div>`).join('')}
+    </div>
+    <div class="panel reveal in"><h2>🗂️ Category Ledger</h2>
+      ${Object.entries(byCat).sort((a,b)=>(b[1].inc+b[1].exp)-(a[1].inc+a[1].exp)).map(([k,v])=>`<div class="kv"><span>${k}</span><span>${v.inc?`<b class="pos">+${fmt$(v.inc)}</b> `:''}${v.exp?`<b class="neg">-${fmt$(v.exp)}</b>`:''}</span></div>`).join('')||'<p class="empty">No data yet.</p>'}
+    </div>
+  </div>`;
+  watchReveals();
+}
+function monthJump(i){
+  txFilter={q:'',biz:'all',cat:'all',type:'all',owner:'all',sort:'date',dir:-1,page:0};
+  go('txns');
+  const mk=curYear+'-'+String(i+1).padStart(2,'0');
+  // soft-filter by re-render with a month query hack: set search to the month prefix via date filter
+  const all=yearTxns().filter(t=>t.date.startsWith(mk));
+  toast(`📅 ${all.length} transactions in that month — full year shown, newest first`);
+}
+
+/* ================= SETTINGS ================= */
+function renderSettings(){
+  $('#page-settings').innerHTML=`
+  <div class="panel reveal in"><h2>⚙️ Settings & Data</h2><p class="hint">Everything lives in this browser's local storage. Back up regularly — the JSON file is your whole book.</p>
+    <div class="kv"><span>Transactions stored</span><b>${DB.txns.length}</b></div>
+    <div class="kv"><span>Mileage entries</span><b>${DB.mileage.length}</b></div>
+    <div class="kv"><span>Theme</span><b>${DB.settings.theme==='dark'?'🌙 Dark':'☀️ Light'}</b></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px">
+      <button class="btn" onclick="backupJSON()">💾 Download Backup (JSON)</button>
+      <button class="btn ghost" onclick="go('import')">📥 Restore Backup</button>
+      <button class="btn ghost" onclick="seedDemo()">🎲 Load Demo Data</button>
+      <button class="btn ghost" onclick="setTheme(DB.settings.theme==='dark'?'light':'dark')">🌓 Toggle Theme</button>
+      <button class="btn danger" onclick="wipeAll()">🗑 Erase Everything</button>
+    </div>
+  </div>
+  <div class="panel reveal in"><h2>🧠 Smart Categories</h2><p class="hint">When you import or type a description, N8Books auto-files it using rules learned from your real books:</p>
+    <div class="kv"><span>Randstad / Wild Leaf / Arc / Amazon deposits</span><b>→ W-2 Wages</b></div>
+    <div class="kv"><span>Amway / LTD charges</span><b>→ Product Purchases (Amway)</b></div>
+    <div class="kv"><span>Amway conference / summit</span><b>→ Training / Conferences</b></div>
+    <div class="kv"><span>Crew names (Hendricks, Crowder, Morris, Naishawn)</span><b>→ Contract Labor (CFP)</b></div>
+    <div class="kv"><span>Home Depot / paint / tile</span><b>→ Materials & Supplies (CFP)</b></div>
+    <div class="kv"><span>Verizon / Xfinity / utilities</span><b>→ Utilities & Phone</b></div>
+    <div class="kv"><span>IRS / Maryland</span><b>→ Taxes & Licenses</b></div>
+  </div>
+  <div class="panel reveal in"><h2>🗂️ Category Map (Schedule C)</h2>
+    <div class="twrap"><table><tr><th>Category</th><th>Type</th><th>Tax Line</th></tr>
+    ${CATS.map(c=>`<tr><td>${c[1]}</td><td>${c[2]==='income'?'💰 Income':'🧾 Expense'}</td><td>${c[3]}</td></tr>`).join('')}</table></div>
+  </div>`;
+  watchReveals();
+}
+function wipeAll(){
+  openModal(`<h3>⚠️ Erase everything?</h3><p style="color:var(--mut);margin-bottom:16px">This deletes ALL transactions and mileage from this browser. Download a backup first if you might want them back. This cannot be undone.</p>
+  <div style="display:flex;gap:10px;justify-content:flex-end"><button class="btn ghost" onclick="closeModal()">Keep My Data</button><button class="btn danger" onclick="DB={txns:[],mileage:[],customCats:[],settings:DB.settings};saveDB();fillYears();closeModal();toast('🗑 All data erased');go('dash')">Erase It All</button></div>`);
+}
+function seedDemo(){
+  const y=curYear;let n=0;
+  const demo=[
+    [y+'-01-06','Tile job deposit — Erika',1500,'income','inc_sales','cfp','Zelle'],
+    [y+'-01-08','Home Depot — tile, grout, supplies',-412.55,'expense','supplies','cfp','Card'],
+    [y+'-01-12','Antonio Hendricks — crew labor',-300,'expense','labor','cfp','Cash App'],
+    [y+'-01-15','Randstad — Wild Leaf paycheck',1820.44,'income','inc_w2','w2','Chime'],
+    [y+'-01-20','Amway product order',-326.10,'expense','prod','amw','Card'],
+    [y+'-02-03','LTD Summit tickets x2',-254.40,'expense','train','amw','Card'],
+    [y+'-02-10','Paint job — Kevin U.',2200,'income','inc_sales','cfp','Zelle'],
+    [y+'-02-14','Sherwin Williams — paint',-289.99,'expense','supplies','cfp','Card'],
+    [y+'-02-28','Randstad — Wild Leaf paycheck',1795.02,'income','inc_w2','w2','Chime'],
+    [y+'-03-05','Amway 1099-NEC payout',274.39,'income','inc_1099','amw','PayPal'],
+    [y+'-03-11','Joseph Crowder — crew labor',-450,'expense','labor','cfp','Cash App'],
+    [y+'-03-18','Verizon bill',-85.00,'expense','util','per','Citizens Bank'],
+    [y+'-03-22','Church tithe',-200,'expense','donate','per','Cash'],
+    [y+'-04-02','Handyman repairs — Natasha S.',900,'income','inc_sales','cfp','PayPal'],
+  ];
+  demo.forEach(d=>{DB.txns.push({id:uid(),date:d[0],desc:d[1],amount:Math.abs(d[2]),type:d[3],cat:d[4],biz:d[5],method:d[6],note:'',src:'demo'});n++});
+  DB.mileage.push({id:uid(),date:y+'-01-08',miles:36,purpose:'Home → Home Depot → tile job (Erika)',biz:'cfp'});
+  DB.mileage.push({id:uid(),date:y+'-02-10',miles:22,purpose:'Paint job run — Kevin U.',biz:'cfp'});
+  DB.mileage.push({id:uid(),date:y+'-03-01',miles:610,purpose:'Baltimore → Louisville (LTD Summit)',biz:'amw'});
+  saveDB();fillYears();toast(`🎲 Demo data loaded (${n} transactions + mileage)!`);go('dash');
+}
+
+/* ================= BOOT ================= */
+fillYears();
+renderDash();watchReveals();
+/* subtle hero parallax */
+addEventListener('scroll',()=>{const h=$('#hero');if(h&&scrollY<600)h.style.transform=`translateY(${scrollY*.08}px)`},{passive:true});
+</script>
+<script>
+'use strict';
+/* ================= WRITE-OFF EXPLORER ================= */
+/* pct = deductible % of the expense. cat maps to N8Books categories for the "logged this year" check. */
+const WRITEOFFS={
+ cfp:[
+  {n:'Materials & supplies (paint, tile, lumber)',pct:100,cat:'supplies',note:'Job materials are fully deductible. Keep receipts per job.'},
+  {n:'Tools & small equipment',pct:100,cat:'tools',note:'Under $2,500/item can be expensed outright (de minimis safe harbor).'},
+  {n:'Big equipment (Section 179 / bonus depreciation)',pct:100,cat:'dep',note:'Expensed in year placed in service — see yearly % table. Big-ticket gear, trailers, etc.'},
+  {n:'Contract labor (crew)',pct:100,cat:'labor',note:'Issue Form 1099-NEC to any crew paid $600+ in a year.'},
+  {n:'Vehicle mileage (standard rate)',pct:100,cat:'veh',note:'Log date, miles & purpose. Or deduct actual vehicle costs — never both.'},
+  {n:'Business liability insurance',pct:100,cat:'ins',note:'General liability, bonding, commercial auto.'},
+  {n:'Licenses, permits & certifications',pct:100,cat:'taxlic',note:'MHIC-related fees, trade licenses, permit costs.'},
+  {n:'Advertising (website, Google listing, cards, wraps)',pct:100,cat:'adv',note:'Anything that brings in jobs counts — including branded uniforms/apparel worn as walking advertisement. Track per-person in the People tab.'},
+  {n:'Cell phone (business %)',pct:100,cat:'util',note:'Deduct the business-use share of the bill. Document your %.'},
+  {n:'Home office',pct:100,cat:'office',note:'Simplified: $5/sq ft up to 300 sq ft ($1,500 max). Regular: % of rent, utilities, insurance.'},
+  {n:'Safety gear & work boots',pct:100,cat:'supplies',note:'Gear required for the job. Everyday clothing does not count.'},
+  {n:'Training & trade courses',pct:100,cat:'train',note:'Courses that maintain or improve skills in your trade.'},
+  {n:'Dump / disposal fees',pct:100,cat:'other',note:'Debris disposal, dumpster rental for jobs.'},
+  {n:'Software (estimating, invoicing, design)',pct:100,cat:'soft',note:'Apps and subscriptions used to run jobs.'},
+  {n:'Bank & payment fees (Cash App, card processing)',pct:100,cat:'fees',note:'Business account and processing fees.'},
+  {n:'Client meals',pct:50,cat:'meals',note:'50% deductible. Business must be discussed — note who & why.'},
+  {n:'Interest on business loans / cards',pct:100,cat:'int',note:'Interest on money used for the business.'},
+  {n:'Rent for shop / storage',pct:100,cat:'rent',note:'Storage units and shop space used for the business.'},
+ ],
+ amw:[
+  {n:'Product purchases / inventory (COGS)',pct:100,cat:'prod',note:'Your Amway product cost — track against your IBO income summary.'},
+  {n:'Conference tickets (LTD Summit, etc.)',pct:100,cat:'train',note:'Registration for business conferences is fully deductible.'},
+  {n:'Conference travel (hotel, flights, mileage)',pct:100,cat:'travel',note:'Travel away from home for conferences & training.'},
+  {n:'Conference meals',pct:50,cat:'meals',note:'Meals while traveling for business = 50%. Per your books rule, conference-weekend food is a business meal.'},
+  {n:'LTD / system fees (weekly fees, apps)',pct:100,cat:'fees',note:'Training-system fees and business subscriptions.'},
+  {n:'Books, audios & training material',pct:100,cat:'train',note:'Business-building education material.'},
+  {n:'Samples & demo products',pct:100,cat:'prod',note:'Product used for demos counts as business cost.'},
+  {n:'Mileage to meetings, prospects & conferences',pct:100,cat:'veh',note:'Every business mile counts — log them in the Mileage tab.'},
+  {n:'Cell phone & internet (business %)',pct:100,cat:'util',note:'The share used for prospecting, calls and team communication.'},
+  {n:'Home office',pct:100,cat:'office',note:'Simplified $1,500 max, or regular method % of home costs.'},
+  {n:'Office supplies & printing',pct:100,cat:'office',note:'Counsel sheets, flyers, ink, paper.'},
+  {n:'Shipping products to customers',pct:100,cat:'ship',note:'Postage and delivery costs.'},
+  {n:'Business meals with prospects',pct:50,cat:'meals',note:'50% — note the prospect and the business discussed.'},
+ ],
+ w2:[
+  {n:'⚠️ Unreimbursed employee expenses (federal)',pct:0,cat:'other',note:'Suspended federally 2018–2025 (TCJA). Tools, uniforms, mileage for your W-2 job generally do NOT reduce federal tax in these years.'},
+  {n:'Union dues / required licenses (state check)',pct:0,cat:'taxlic',note:'Same federal suspension. Some states differ — ask your preparer about Maryland.'},
+  {n:'What DOES help: pre-tax accounts',pct:100,cat:'other',note:'401(k)/403(b), HSA and FSA contributions lower W-2 taxable wages — the main lever for W-2 income.'},
+  {n:'Job-hunting in the same field',pct:0,cat:'other',note:'Also suspended federally through 2025.'},
+ ],
+};
+/* per-year federal figures */
+const YEAR_RULES={
+ 2023:{mile:0.655,bonus:80,s179:'$1,160,000',s179phase:'$2,890,000',qbi:'20% (available)',meals:50,se:'15.3% on 92.35% of net'},
+ 2024:{mile:0.67,bonus:60,s179:'$1,220,000',s179phase:'$3,050,000',qbi:'20% (available)',meals:50,se:'15.3% on 92.35% of net'},
+ 2025:{mile:0.70,bonus:40,s179:'$1,250,000',s179phase:'$3,130,000',qbi:'20% (final TCJA year)',meals:50,se:'15.3% on 92.35% of net'},
+ 2026:{mile:0.70,bonus:20,s179:'≈$1,250,000+',s179phase:'≈$3,130,000+',qbi:'Check current law',meals:50,se:'15.3% on 92.35% of net'},
+};
+let woTab='cfp';
+function renderWriteoffs(){
+  const yr=YEAR_RULES[curYear]||YEAR_RULES[2026];
+  const tx=yearTxns();
+  const logged=(biz,cat)=>tx.filter(t=>t.biz===biz&&t.cat===cat&&t.type==='expense').reduce((a,t)=>a+t.amount,0);
+  const list=WRITEOFFS[woTab];
+  const claimed=list.filter(w=>logged(woTab,w.cat)>0).length;
+  const milesLogged=yearMiles().filter(m=>m.biz===woTab).reduce((a,m)=>a+m.miles,0);
+  $('#page-writeoffs').innerHTML=`
+  <div class="panel reveal in"><h2>💸 Write-Off Explorer — ${curYear}</h2>
+    <p class="hint">Every deduction on the table for each business, with the deductible % and whether you've logged anything in that bucket this year. If it's ⚠️ unclaimed, money may be sitting on the table.</p>
+    <div class="frow" style="margin-top:6px">
+      ${BIZ.filter(b=>b.id!=='per').map(b=>`<button class="btn ${woTab===b.id?'':'ghost'}" onclick="woTab='${b.id}';renderWriteoffs()">${b.e} ${b.n}</button>`).join('')}
+    </div>
+    <div class="cards" style="margin-top:6px">
+      <div class="card"><div class="lab">Write-offs claimed</div><div class="big">${claimed} / ${list.length}</div><div class="sub">buckets with activity in ${curYear}</div></div>
+      <div class="card"><div class="lab">Logged in these buckets</div><div class="big neg">${fmt$(list.reduce((a,w)=>a+logged(woTab,w.cat),0))}</div><div class="sub">before % adjustments</div></div>
+      <div class="card"><div class="lab">Miles logged (${bizName(woTab)})</div><div class="big gold">${fmtN(milesLogged)} mi</div><div class="sub">= ${fmt$(milesLogged*yr.mile)} at ${curYear} rate</div></div>
+    </div>
+    <div class="twrap"><table><tr><th>Write-Off</th><th>Deductible</th><th>${curYear} Logged</th><th>Status</th><th>Notes</th></tr>
+    ${list.map(w=>{const v=logged(woTab,w.cat);const got=v>0;
+      return `<tr><td><b>${w.n}</b><div style="color:var(--mut);font-size:12px">→ ${catName(w.cat)}</div></td>
+      <td><span class="chip" style="${w.pct===100?'border-color:var(--grn);color:var(--grn)':w.pct===50?'border-color:var(--gold);color:var(--gold)':'border-color:var(--red);color:var(--red)'}">${w.pct}%</span></td>
+      <td class="amt">${got?fmt$(v):'—'}</td>
+      <td>${got?'<span class="pos">✅ Claimed</span>':'<span class="gold">⚠️ Unclaimed</span>'}</td>
+      <td style="color:var(--mut);font-size:13px;max-width:340px">${w.note}</td></tr>`}).join('')}
+    </table></div>
+  </div>
+  <div class="panel reveal in"><h2>📅 ${curYear} Rules & Percentages</h2><p class="hint">The numbers that change year to year. (Reference figures — confirm with your preparer.)</p>
+    <div class="kv"><span>🚗 Standard mileage rate</span><b>$${yr.mile.toFixed(3)} / mile</b></div>
+    <div class="kv"><span>🏗️ Bonus depreciation (equipment)</span><b>${yr.bonus}% in year 1</b></div>
+    <div class="kv"><span>⚡ Section 179 expensing limit</span><b>${yr.s179}</b></div>
+    <div class="kv"><span>⚡ Section 179 phase-out starts</span><b>${yr.s179phase} of purchases</b></div>
+    <div class="kv"><span>🍽️ Business meals deductible</span><b>${yr.meals}%</b></div>
+    <div class="kv"><span>🎉 Entertainment deductible</span><b>0% (since 2018)</b></div>
+    <div class="kv"><span>🏠 Home office (simplified)</span><b>$5 / sq ft, max $1,500</b></div>
+    <div class="kv"><span>💼 QBI pass-through deduction</span><b>${yr.qbi}</b></div>
+    <div class="kv"><span>🧾 Self-employment tax</span><b>${yr.se} (half is deductible)</b></div>
+    <div class="kv"><span>📄 1099-NEC filing threshold</span><b>Pay a contractor $600+ → file one</b></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
+      ${Object.keys(YEAR_RULES).map(y=>`<button class="btn ${+y===curYear?'':'ghost'} small" onclick="curYear=${y};$('#yrSel').value='${y}';fillYears();$('#yrSel').value='${y}';renderWriteoffs()">${y} rules</button>`).join('')}
+    </div>
+    <p class="hint" style="margin-top:12px">💡 Bonus depreciation phases down each year (80% → 60% → 40% → 20%), so buying equipment in an earlier year wrote off more up front. Section 179 usually beats bonus for small businesses since it can cover used gear too.</p>
+  </div>`;
+  watchReveals();
+}
+</script>
+<script>
+'use strict';
+/* ================= PEOPLE & 1099 TRACKER ================= */
+const ROLES=[['promo','👕 Family Promo'],['crew','🛠️ Helper / Day Labor'],['contractor','📄 Contractor'],['other','👤 Other']];
+const roleName=r=>(ROLES.find(x=>x[0]===r)||ROLES[3])[1];
+function personYearTxns(p){
+  const nm=p.name.toLowerCase();
+  return yearTxns().filter(t=>t.type==='expense'&&(t.desc+' '+(t.note||'')).toLowerCase().includes(nm));
+}
+function renderPeople(){
+  const cards=DB.people.map(p=>{
+    const txs=personYearTxns(p),total=txs.reduce((a,t)=>a+t.amount,0);
+    const needs1099=(p.role==='crew'||p.role==='contractor')&&total>=600;
+    return `<div class="panel reveal in"><h2>${esc(p.name)}</h2>
+      <div class="kv"><span>Role</span><b>${roleName(p.role)}</b></div>
+      <div class="kv"><span>Paid in ${curYear}</span><b class="neg">${fmt$(total)}</b></div>
+      <div class="kv"><span>Transactions</span><b>${txs.length}</b></div>
+      ${needs1099?`<div class="kv"><span>1099-NEC</span><b class="gold">⚠️ Over $600 — 1099-NEC due Jan 31</b></div>`:''}
+      ${p.role==='promo'?`<div class="kv"><span>Tax bucket</span><b>Advertising & Marketing (100%)</b></div>`:''}
+      ${p.note?`<p class="hint" style="margin-top:8px">📝 ${esc(p.note)}</p>`:''}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+        <button class="btn small" onclick="logForPerson('${p.id}')">➕ Log Payment / Purchase</button>
+        <button class="btn ghost small" onclick="openPerson('${p.id}')">✏️ Edit</button>
+        <button class="btn ghost small" onclick="delPerson('${p.id}')">🗑 Remove</button>
+      </div></div>`;
+  }).join('');
+  $('#page-people').innerHTML=`
+  <div class="panel reveal in"><h2>👥 People — Payments & Promo Tracker</h2>
+    <p class="hint">Add anyone you pay or buy for in the business — your own custom names. N8Books totals what each person cost you in ${curYear} by matching their name in your transactions. Helpers/contractors over <b>$600</b> get flagged for a 1099-NEC (due Jan 31). Family promo spending (branded uniforms, shirts) files under Advertising — 100% deductible.</p>
+    <button class="btn" onclick="openPerson()">➕ Add a Person</button>
+  </div>
+  ${DB.people.length?`<div class="grid2" style="margin-top:18px">${cards}</div>`:'<div class="panel reveal in"><p class="empty">Nobody here yet. Add your first person — a helper, a contractor, or one of the kids for promo uniforms. 👕</p></div>'}`;
+  watchReveals();
+}
+function openPerson(id){
+  const p=id?DB.people.find(x=>x.id===id):null;
+  openModal(`<h3>${p?'✏️ Edit':'➕ Add'} Person</h3><form id="personForm">
+    <div class="frow"><div class="fld" style="flex:2"><label>Name (must match how it appears in transactions)</label><input id="pName" required placeholder="e.g. Ne'ala Clark" value="${p?esc(p.name):''}"></div>
+    <div class="fld"><label>Role</label><select id="pRole">${ROLES.map(r=>`<option value="${r[0]}" ${p&&p.role===r[0]?'selected':''}>${r[1]}</option>`).join('')}</select></div></div>
+    <div class="fld"><label>Notes (uniform sizes, rates, anything)</label><input id="pNote" placeholder="e.g. Youth L shirts · $25/hr · W-9 on file" value="${p?esc(p.note||''):''}"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:10px"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn">💾 Save</button></div>
+  </form>`);
+  $('#personForm').addEventListener('submit',e=>{e.preventDefault();
+    const data={name:$('#pName').value.trim(),role:$('#pRole').value,note:$('#pNote').value.trim()};
+    if(p)Object.assign(p,data);else DB.people.push({id:uid(),...data});
+    saveDB();closeModal();toast('✅ Saved!');renderPeople()});
+}
+function delPerson(id){DB.people=DB.people.filter(x=>x.id!==id);saveDB();toast('🗑 Removed (their transactions stay in the books)');renderPeople()}
+function logForPerson(id){
+  const p=DB.people.find(x=>x.id===id);if(!p)return;
+  openAdd('expense');
+  setTimeout(()=>{
+    $('#fDesc').value=(p.role==='promo'?'Branded uniforms — ':'Payment — ')+p.name;
+    $('#fCat').value=p.role==='promo'?'adv':'labor';
+    $('#fBiz').value='cfp';$('#fOwner').value='joint';
+  },60);
+}
+
+/* ================= INVOICES & ESTIMATES ================= */
+const invTotal=inv=>inv.items.reduce((a,i)=>a+(+i.qty||0)*(+i.rate||0),0);
+function nextInvNum(){
+  const y=curYear;const n=DB.invoices.filter(i=>i.num&&i.num.includes('-'+y+'-')).length+1;
+  return 'INV-'+y+'-'+String(n).padStart(3,'0');
+}
+function renderInvoices(){
+  const list=[...DB.invoices].sort((a,b)=>b.date.localeCompare(a.date));
+  const yr=list.filter(i=>yrOf(i.date)===curYear);
+  const paid=yr.filter(i=>i.status==='Paid').reduce((a,i)=>a+invTotal(i),0);
+  const open=yr.filter(i=>i.status!=='Paid').reduce((a,i)=>a+invTotal(i),0);
+  $('#page-invoices').innerHTML=`
+  <div class="panel reveal in"><h2>🧾 Invoices & Estimates — Clark Family Projects</h2>
+    <p class="hint">Build an estimate, send it, and when the client pays, one tap posts it straight into your income. No more jobs living only in text messages.</p>
+    <div class="cards" style="margin-top:8px">
+      <div class="card"><div class="lab">💰 Collected ${curYear}</div><div class="big pos">${fmt$(paid)}</div></div>
+      <div class="card"><div class="lab">⏳ Outstanding</div><div class="big gold">${fmt$(open)}</div></div>
+      <div class="card"><div class="lab">📄 Total Invoices</div><div class="big">${list.length}</div></div>
+    </div>
+    <button class="btn" onclick="openInvoice()">➕ New Invoice / Estimate</button>
+    ${yr.length?`<div class="twrap" style="margin-top:14px"><table><tr><th>#</th><th>Date</th><th>Client</th><th>Status</th><th style="text-align:right">Total</th><th></th></tr>
+    ${yr.map(i=>`<tr><td>${esc(i.num)}</td><td>${i.date}</td><td>${esc(i.client)}</td>
+      <td><span class="chip" style="${i.status==='Paid'?'border-color:var(--grn);color:var(--grn)':i.status==='Sent'?'border-color:var(--gold);color:var(--gold)':''}">${i.status}</span></td>
+      <td class="amt">${fmt$(invTotal(i))}</td>
+      <td style="white-space:nowrap"><button class="iconbtn" title="Edit" onclick="openInvoice('${i.id}')">✏️</button>
+      ${i.status!=='Paid'?`<button class="iconbtn" title="Mark paid & post income" onclick="markPaid('${i.id}')">💰</button>`:''}
+      <button class="iconbtn" title="Download printable invoice" onclick="downloadInvoice('${i.id}')">⬇️</button>
+      <button class="iconbtn" title="Delete" onclick="delInvoice('${i.id}')">🗑</button></td></tr>`).join('')}
+    </table></div>`:'<p class="empty">No invoices for '+curYear+' yet. Your first one is 60 seconds away. 🧾</p>'}
+  </div>`;
+  watchReveals();
+}
+function itemRow(it){
+  return `<div class="frow itemrow"><div class="fld" style="flex:3"><input class="iDesc" placeholder="Work / item description" value="${it?esc(it.desc):''}"></div>
+  <div class="fld"><input class="iQty" type="number" step="0.01" min="0" placeholder="Qty" value="${it?it.qty:1}"></div>
+  <div class="fld"><input class="iRate" type="number" step="0.01" min="0" placeholder="Rate $" value="${it?it.rate:''}"></div>
+  <div class="fld" style="flex:0"><button type="button" class="iconbtn" onclick="this.closest('.itemrow').remove();invCalc()">✖</button></div></div>`;
+}
+function openInvoice(id){
+  const inv=id?DB.invoices.find(x=>x.id===id):null;
+  openModal(`<h3>${inv?'✏️ '+esc(inv.num):'🧾 New Invoice'} </h3><form id="invForm">
+    <div class="frow"><div class="fld" style="flex:2"><label>Client</label><input id="iClient" required placeholder="Client name" value="${inv?esc(inv.client):''}"></div>
+    <div class="fld"><label>Number</label><input id="iNum" value="${inv?inv.num:nextInvNum()}"></div></div>
+    <div class="frow"><div class="fld"><label>Date</label><input type="date" id="iDate" required value="${inv?inv.date:todayStr()}"></div>
+    <div class="fld"><label>Due Date</label><input type="date" id="iDue" value="${inv?inv.due:todayStr()}"></div>
+    <div class="fld"><label>Type / Status</label><select id="iStatus">${['Estimate','Sent','Paid'].map(s=>`<option ${inv&&inv.status===s?'selected':''}>${s}</option>`).join('')}</select></div></div>
+    <label style="font-size:13px;color:var(--mut)">Line Items</label>
+    <div id="itemRows">${(inv?inv.items:[{}]).map(itemRow).join('')}</div>
+    <button type="button" class="btn ghost small" onclick="$('#itemRows').insertAdjacentHTML('beforeend',itemRowHTML())">➕ Add Line</button>
+    <div class="kv" style="margin-top:10px"><span><b>Total</b></span><b id="invTotalOut">$0.00</b></div>
+    <div class="fld" style="margin-top:8px"><label>Notes on invoice</label><input id="iNote" placeholder="e.g. Thank you! Payment via Zelle or Cash App." value="${inv?esc(inv.note||''):''}"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn">💾 Save Invoice</button></div>
+  </form>`);
+  const calc=()=>{let t=0;$$('#itemRows .itemrow').forEach(r=>{t+=(parseFloat(r.querySelector('.iQty').value)||0)*(parseFloat(r.querySelector('.iRate').value)||0)});$('#invTotalOut').textContent=fmt$(t)};
+  window.invCalc=calc;$$('#itemRows input').forEach(i=>i.addEventListener('input',calc));calc();
+  $('#invForm').addEventListener('submit',e=>{e.preventDefault();
+    const items=$$('#itemRows .itemrow').map(r=>({desc:r.querySelector('.iDesc').value.trim(),qty:parseFloat(r.querySelector('.iQty').value)||0,rate:parseFloat(r.querySelector('.iRate').value)||0})).filter(i=>i.desc||i.rate);
+    const data={num:$('#iNum').value.trim(),client:$('#iClient').value.trim(),date:$('#iDate').value,due:$('#iDue').value,status:$('#iStatus').value,items,note:$('#iNote').value.trim()};
+    if(inv)Object.assign(inv,data);else DB.invoices.push({id:uid(),...data});
+    saveDB();closeModal();toast('🧾 Invoice saved!');renderInvoices()});
+}
+function itemRowHTML(){const d=document.createElement('div');d.innerHTML=itemRow(null);const html=d.innerHTML;setTimeout(()=>$$('#itemRows input').forEach(i=>i.addEventListener('input',window.invCalc)),30);return html}
+function markPaid(id){
+  const inv=DB.invoices.find(x=>x.id===id);if(!inv||inv.status==='Paid')return;
+  inv.status='Paid';
+  const t={id:uid(),date:todayStr(),desc:'Invoice '+inv.num+' — '+inv.client,amount:invTotal(inv),type:'income',cat:'inc_sales',biz:'cfp',method:'Other',note:'From invoice '+inv.num,src:'invoice',owner:'joint'};
+  DB.txns.push(t);inv.paidTxnId=t.id;saveDB();fillYears();
+  toast('💰 Paid! '+fmt$(t.amount)+' posted to income.');renderInvoices();
+}
+function delInvoice(id){const inv=DB.invoices.find(x=>x.id===id);DB.invoices=DB.invoices.filter(x=>x.id!==id);saveDB();toast(inv&&inv.paidTxnId?'🗑 Invoice deleted (the posted income stays in Transactions)':'🗑 Invoice deleted');renderInvoices()}
+function downloadInvoice(id){
+  const inv=DB.invoices.find(x=>x.id===id);if(!inv)return;
+  const rows=inv.items.map(i=>`<tr><td>${esc(i.desc)}</td><td style="text-align:right">${i.qty}</td><td style="text-align:right">${fmt$(i.rate)}</td><td style="text-align:right">${fmt$(i.qty*i.rate)}</td></tr>`).join('');
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(inv.num)}</title><style>body{font-family:Arial,sans-serif;max-width:720px;margin:40px auto;color:#111}h1{margin:0}.brand{color:#5b21b6}table{width:100%;border-collapse:collapse;margin-top:20px}th,td{border-bottom:1px solid #ddd;padding:10px;text-align:left}th{background:#f4f4f8}.tot{font-size:20px;font-weight:bold;text-align:right;margin-top:16px}.mut{color:#666}</style></head><body>
+  <h1 class="brand">🔧 Clark Family Projects LLC</h1><p class="mut">Baltimore, MD</p>
+  <h2>${inv.status==='Estimate'?'ESTIMATE':'INVOICE'} ${esc(inv.num)}</h2>
+  <p><b>Bill to:</b> ${esc(inv.client)}<br><b>Date:</b> ${inv.date} &nbsp; <b>Due:</b> ${inv.due||inv.date}</p>
+  <table><tr><th>Description</th><th style="text-align:right">Qty</th><th style="text-align:right">Rate</th><th style="text-align:right">Amount</th></tr>${rows}</table>
+  <div class="tot">Total: ${fmt$(invTotal(inv))}</div>
+  ${inv.note?`<p style="margin-top:20px">${esc(inv.note)}</p>`:''}
+  <p class="mut" style="margin-top:30px">Thank you for your business! — Clark Family Projects LLC</p></body></html>`;
+  download(inv.num+'.html',html,'text/html');toast('⬇️ Printable invoice downloaded!');
+}
+</script>
+<script>
+'use strict';
+/* ================= TAX HQ: QUARTERLY + VAULT ================= */
+const QDEF=[
+ {q:1,label:'Q1',due:(y)=>y+'-04-15',months:[0,1,2]},
+ {q:2,label:'Q2',due:(y)=>y+'-06-15',months:[3,4,5]},
+ {q:3,label:'Q3',due:(y)=>y+'-09-15',months:[6,7,8]},
+ {q:4,label:'Q4',due:(y)=>(y+1)+'-01-15',months:[9,10,11]},
+];
+function renderTaxHQ(){
+  const tx=yearTxns().filter(t=>t.biz==='cfp'||t.biz==='amw'); // business income only
+  const pays=DB.taxPayments.filter(p=>p.year===curYear);
+  const totalBizNet=totals(tx).net;
+  const setAside=Math.max(0,totalBizNet)*0.22;
+  const paidTotal=pays.reduce((a,p)=>a+p.amount,0);
+  const qCards=QDEF.map(d=>{
+    const qTx=tx.filter(t=>d.months.includes(+t.date.slice(5,7)-1));
+    const target=Math.max(0,totals(qTx).net)*0.22;
+    const paid=pays.filter(p=>p.quarter===d.q).reduce((a,p)=>a+p.amount,0);
+    const pct=target>0?Math.min(100,Math.round(paid/target*100)):paid>0?100:0;
+    const overdue=todayStr()>d.due(curYear)&&paid<target&&target>0;
+    return `<div class="card reveal in"><div class="lab">${d.label} — due ${d.due(curYear)} ${overdue?'🔴 OVERDUE':''}</div>
+      <div class="big ${paid>=target&&target>0?'pos':'gold'}">${fmt$(paid)} <span style="font-size:15px;color:var(--mut)">/ ${fmt$(target)}</span></div>
+      <div class="prog"><i style="width:${pct}%"></i></div>
+      <div class="sub">${pct}% of rough target (22% of quarter business net)</div></div>`;
+  }).join('');
+  const byType={};DB.docs.forEach(d=>{if(d.year===curYear)byType[d.type]=(byType[d.type]||0)+1});
+  $('#page-taxhq').innerHTML=`
+  <div class="panel reveal in"><h2>⏰ Quarterly Tax HQ — ${curYear}</h2>
+    <p class="hint">Estimated taxes are due four times a year. Targets below are a rough 22% of each quarter's business net (CFP + Amway) — log what you actually send the IRS and Maryland so there's never a surprise balance like this year's again.</p>
+    <div class="cards">
+      <div class="card"><div class="lab">Business Net ${curYear}</div><div class="big">${fmt$(totalBizNet)}</div><div class="sub">CFP + Amway only (not W-2)</div></div>
+      <div class="card"><div class="lab">Rough Set-Aside (22%)</div><div class="big gold">${fmt$(setAside)}</div></div>
+      <div class="card"><div class="lab">Actually Paid</div><div class="big pos">${fmt$(paidTotal)}</div><div class="sub">${pays.length} payments logged</div></div>
+      <div class="card"><div class="lab">Still to Cover</div><div class="big ${setAside-paidTotal>0?'neg':''}">${fmt$(Math.max(0,setAside-paidTotal))}</div></div>
+    </div>
+    <div class="cards">${qCards}</div>
+    <button class="btn" onclick="openTaxPayment()">➕ Log a Tax Payment</button>
+    ${pays.length?`<div class="twrap" style="margin-top:14px"><table><tr><th>Date</th><th>Paid To</th><th>Quarter</th><th style="text-align:right">Amount</th><th></th></tr>
+    ${pays.sort((a,b)=>b.date.localeCompare(a.date)).map(p=>`<tr><td>${p.date}</td><td>${p.to==='IRS'?'🇺🇸 IRS (federal)':'🦀 Maryland'}</td><td>Q${p.quarter}</td><td class="amt">${fmt$(p.amount)}</td><td><button class="iconbtn" onclick="delTaxPayment('${p.id}')">🗑</button></td></tr>`).join('')}</table></div>`:''}
+  </div>
+  <div class="panel reveal in"><h2>📄 Document Vault — ${curYear}</h2>
+    <p class="hint">W-2s, 1099s, receipts, contracts — stored in this browser's <b>IndexedDB</b> (way beyond the old 5MB localStorage cap), tagged by year and business. Photos are compressed to WebP. Note: document files live on this device and don't travel with JSON backups — keep originals of big items in Drive too. Vault holds ${DB.docs.length} documents (${Object.entries(byType).map(([k,v])=>k+': '+v).join(' · ')||'none this year'}).</p>
+    <div class="drop" id="docDrop"><div class="big">🗂️</div><b>Drop a document</b> or click to browse<br><span style="font-size:13px">Photos of receipts, W-2 / 1099 scans, PDFs under 1MB</span>
+    <input type="file" id="docFile" accept="image/*,.pdf" hidden></div>
+    <div id="docMeta"></div>
+    <div class="grid2" style="margin-top:16px">${DB.docs.filter(d=>d.year===curYear).map(d=>`
+      <div class="panel" style="margin:0"><h2 style="font-size:16px">${d.type==='Receipt'?'🧾':d.type.startsWith('1099')?'📑':d.type==='W-2'?'🏭':'📄'} ${esc(d.name)}</h2>
+      <div class="kv"><span>Type</span><b>${esc(d.type)}</b></div>
+      <div class="kv"><span>Business</span><b>${bizName(d.biz)}</b></div>
+      ${d.mime.startsWith('image')?`<img data-docimg="${d.id}" alt="document" style="width:100%;border-radius:10px;margin-top:8px;max-height:180px;object-fit:cover;background:var(--panel2)">`:''}
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn small" onclick="viewDoc('${d.id}')">👁 View</button>
+        <button class="btn ghost small" onclick="delDoc('${d.id}')">🗑 Delete</button>
+      </div></div>`).join('')||'<p class="empty">No documents stored for '+curYear+' yet.</p>'}
+    </div>
+  </div>`;
+  const dz=$('#docDrop'),fi=$('#docFile');
+  dz.addEventListener('click',()=>fi.click());
+  dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('over')});
+  dz.addEventListener('dragleave',()=>dz.classList.remove('over'));
+  dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('over');if(e.dataTransfer.files[0])stageDoc(e.dataTransfer.files[0])});
+  fi.addEventListener('change',()=>{if(fi.files[0])stageDoc(fi.files[0])});
+  hydrateDocImages();
+  watchReveals();
+}
+function openTaxPayment(){
+  openModal(`<h3>💸 Log Estimated Tax Payment</h3><form id="tpForm">
+    <div class="frow"><div class="fld"><label>Date Paid</label><input type="date" id="tpDate" required value="${todayStr()}"></div>
+    <div class="fld"><label>Amount ($)</label><input type="number" id="tpAmt" step="0.01" min="0" required placeholder="0.00"></div></div>
+    <div class="frow"><div class="fld"><label>Paid To</label><select id="tpTo"><option value="IRS">🇺🇸 IRS (federal)</option><option value="MD">🦀 Maryland</option></select></div>
+    <div class="fld"><label>For Quarter</label><select id="tpQ">${[1,2,3,4].map(q=>`<option value="${q}">Q${q} ${curYear}</option>`).join('')}</select></div></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn">💾 Save Payment</button></div>
+  </form>`);
+  $('#tpForm').addEventListener('submit',e=>{e.preventDefault();
+    DB.taxPayments.push({id:uid(),date:$('#tpDate').value,amount:parseFloat($('#tpAmt').value)||0,to:$('#tpTo').value,quarter:+$('#tpQ').value,year:curYear});
+    saveDB();closeModal();toast('💸 Payment logged!');renderTaxHQ()});
+}
+function delTaxPayment(id){DB.taxPayments=DB.taxPayments.filter(p=>p.id!==id);saveDB();renderTaxHQ()}
+let stagedDoc=null;
+function stageDoc(file){
+  if(file.type==='application/pdf'&&file.size>1024*1024){toast('⚠️ That PDF is over 1MB — keep the original in Drive and store a photo/scan here instead.');return}
+  const finish=(dataUrl,mime)=>{
+    stagedDoc={dataUrl,mime:mime||file.type,name:file.name};
+    $('#docMeta').innerHTML=`<div class="panel" style="margin-top:14px"><h2>🏷️ Tag "${esc(file.name)}"</h2>
+      <div class="frow"><div class="fld"><label>Document Type</label><select id="dType">${['Receipt','W-2','1099-NEC','1099-MISC','Bank Statement','Contract','Other'].map(t=>`<option>${t}</option>`).join('')}</select></div>
+      <div class="fld"><label>Business</label><select id="dBiz">${BIZ.map(b=>`<option value="${b.id}">${b.e} ${b.n}</option>`).join('')}</select></div>
+      <div class="fld"><label>Tax Year</label><input type="number" id="dYear" value="${curYear}"></div>
+      <div class="fld" style="flex:2"><label>Display Name</label><input id="dName" value="${esc(file.name)}"></div></div>
+      <button class="btn" onclick="saveDoc()">💾 Save to Vault</button></div>`;
+    $('#docMeta').scrollIntoView({behavior:'smooth'});
+  };
+  if(file.type.startsWith('image/')){
+    const img=new Image();
+    img.onload=()=>{const scale=Math.min(1,1100/Math.max(img.width,img.height));
+      const cv=document.createElement('canvas');cv.width=img.width*scale;cv.height=img.height*scale;
+      cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
+      let du=cv.toDataURL('image/webp',0.82);const isWebP=du.startsWith('data:image/webp');
+      if(!isWebP)du=cv.toDataURL('image/jpeg',0.8);
+      finish(du,isWebP?'image/webp':'image/jpeg');URL.revokeObjectURL(img.src)};
+    img.src=URL.createObjectURL(file);
+  }else{
+    const r=new FileReader();r.onload=()=>finish(r.result);r.readAsDataURL(file);
+  }
+}
+async function saveDoc(){
+  if(!stagedDoc)return;
+  const id=uid();
+  try{await idbPut('docs',id,stagedDoc.dataUrl)}catch(e){toast('⚠️ Browser storage blocked the save');return}
+  DB.docs.push({id,name:$('#dName').value.trim()||stagedDoc.name,type:$('#dType').value,biz:$('#dBiz').value,year:+$('#dYear').value||curYear,mime:stagedDoc.mime,added:todayStr(),sizeKB:Math.round(stagedDoc.dataUrl.length*0.75/1024)});
+  stagedDoc=null;saveDB();fillYears();toast('🗂️ Saved to the Vault (IndexedDB — no 5MB limit)!');renderTaxHQ();
+}
+async function viewDoc(id){
+  const d=DB.docs.find(x=>x.id===id);if(!d)return;
+  let dataUrl=null;
+  try{dataUrl=await idbGet('docs',id)}catch(e){}
+  if(!dataUrl&&d.dataUrl)dataUrl=d.dataUrl;
+  if(!dataUrl){toast('⚠️ File not found on this device');return}
+  fetch(dataUrl).then(r=>r.blob()).then(b=>{const u=URL.createObjectURL(b);open(u,'_blank');setTimeout(()=>URL.revokeObjectURL(u),60000)});
+}
+async function hydrateDocImages(){
+  for(const img of $$('img[data-docimg]')){
+    const d=DB.docs.find(x=>x.id===img.dataset.docimg);
+    let du=null;try{du=await idbGet('docs',img.dataset.docimg)}catch(e){}
+    if(!du&&d&&d.dataUrl)du=d.dataUrl;
+    if(du)img.src=du;
+  }
+}
+function delDoc(id){DB.docs=DB.docs.filter(x=>x.id!==id);saveDB();idbDel('docs',id).catch(()=>{});toast('🗑 Document deleted');renderTaxHQ()}
+</script>
+<script>
+'use strict';
+/* ================= RECURRING ENTRIES ================= */
+const FREQS=[['weekly','Every week'],['biweekly','Every 2 weeks'],['monthly','Monthly'],['quarterly','Quarterly'],['yearly','Yearly']];
+const freqName=f=>(FREQS.find(x=>x[0]===f)||FREQS[2])[1];
+function advanceDate(ds,freq){
+  const d=new Date(ds+'T12:00:00');
+  if(freq==='weekly')d.setDate(d.getDate()+7);
+  else if(freq==='biweekly')d.setDate(d.getDate()+14);
+  else if(freq==='monthly')d.setMonth(d.getMonth()+1);
+  else if(freq==='quarterly')d.setMonth(d.getMonth()+3);
+  else if(freq==='yearly')d.setFullYear(d.getFullYear()+1);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function runRecurring(){
+  let added=0;const today=todayStr();
+  for(const r of DB.recurring){
+    if(!r.active)continue;
+    let guard=0;
+    while(r.nextDate<=today&&guard<260){
+      DB.txns.push({id:uid(),date:r.nextDate,desc:r.desc,amount:r.amount,type:r.type,cat:r.cat,biz:r.biz,method:r.method,note:'(recurring)',src:'recurring',owner:r.owner||ownerForBiz(r.biz)});
+      r.nextDate=advanceDate(r.nextDate,r.freq);added++;guard++;
+    }
+  }
+  if(added){saveDB()}
+  return added;
+}
+function recurringPanelHTML(){
+  return `<div class="panel reveal in"><h2>🔁 Recurring Entries</h2>
+  <p class="hint">Set it once — N8Books logs it automatically whenever you open the app. LTD $5 weekly fees, subscriptions, rent, retainers…</p>
+  <button class="btn" onclick="openRecurring()">➕ New Recurring Entry</button>
+  ${DB.recurring.length?`<div class="twrap" style="margin-top:14px"><table><tr><th>Description</th><th>Type</th><th>Category</th><th>Every</th><th>Next Due</th><th style="text-align:right">Amount</th><th>Status</th><th></th></tr>
+  ${DB.recurring.map(r=>`<tr><td>${esc(r.desc)}</td><td>${r.type==='income'?'💰 Income':'🧾 Expense'}</td><td>${catName(r.cat)}</td><td>${freqName(r.freq)}</td><td>${r.nextDate}</td>
+  <td class="amt ${r.type==='income'?'pos':'neg'}">${fmt$(r.amount)}</td><td>${r.active?'✅ On':'⏸ Paused'}</td>
+  <td style="white-space:nowrap"><button class="iconbtn" onclick="toggleRecurring('${r.id}')">${r.active?'⏸':'▶️'}</button><button class="iconbtn" onclick="delRecurring('${r.id}')">🗑</button></td></tr>`).join('')}
+  </table></div>`:'<p class="empty">No recurring entries yet.</p>'}</div>`;
+}
+function openRecurring(){
+  openModal(`<h3>🔁 New Recurring Entry</h3><form id="recForm">
+    <div class="frow"><div class="fld" style="flex:2"><label>Description</label><input id="rDesc" required placeholder="e.g. LTD weekly fee"></div>
+    <div class="fld"><label>Amount ($)</label><input id="rAmt" type="number" step="0.01" min="0" required placeholder="0.00"></div></div>
+    <div class="frow"><div class="fld"><label>Type</label><select id="rType"><option value="expense">🧾 Expense</option><option value="income">💰 Income</option></select></div>
+    <div class="fld"><label>Category</label><select id="rCat">${CATS.map(c=>`<option value="${c[0]}">${c[1]}</option>`).join('')}</select></div>
+    <div class="fld"><label>Business</label><select id="rBiz">${BIZ.map(b=>`<option value="${b.id}">${b.e} ${b.n}</option>`).join('')}</select></div></div>
+    <div class="frow"><div class="fld"><label>Frequency</label><select id="rFreq">${FREQS.map(f=>`<option value="${f[0]}">${f[1]}</option>`).join('')}</select></div>
+    <div class="fld"><label>First / Next Date</label><input type="date" id="rNext" required value="${todayStr()}"></div>
+    <div class="fld"><label>Method</label><select id="rMethod">${METHODS.map(m=>`<option>${m}</option>`).join('')}</select></div></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn">💾 Save Rule</button></div>
+  </form>`);
+  const syncCats=()=>{$('#rCat').innerHTML=CATS.filter(c=>c[2]===$('#rType').value).map(c=>`<option value="${c[0]}">${c[1]}</option>`).join('')};
+  $('#rType').addEventListener('change',syncCats);syncCats();
+  $('#recForm').addEventListener('submit',e=>{e.preventDefault();
+    DB.recurring.push({id:uid(),desc:$('#rDesc').value.trim(),amount:Math.abs(parseFloat($('#rAmt').value)||0),type:$('#rType').value,cat:$('#rCat').value,biz:$('#rBiz').value,method:$('#rMethod').value,freq:$('#rFreq').value,nextDate:$('#rNext').value,active:true,owner:ownerForBiz($('#rBiz').value)});
+    saveDB();closeModal();const n=runRecurring();toast(n?'🔁 Rule saved — '+n+' due entries logged!':'🔁 Rule saved!');renderSettings();});
+}
+function toggleRecurring(id){const r=DB.recurring.find(x=>x.id===id);if(r)r.active=!r.active;saveDB();renderSettings()}
+function delRecurring(id){DB.recurring=DB.recurring.filter(x=>x.id!==id);saveDB();toast('🗑 Rule removed (past entries stay)');renderSettings()}
+/* plug the panel into Settings */
+const _renderSettingsBase=renderSettings;
+renderSettings=function(){_renderSettingsBase();$('#page-settings').insertAdjacentHTML('beforeend',recurringPanelHTML());watchReveals()};
+/* auto-run due recurring entries on load */
+const _bootAdded=runRecurring();
+if(_bootAdded){fillYears();render(currentPage());setTimeout(()=>toast('🔁 '+_bootAdded+' recurring entr'+(_bootAdded===1?'y':'ies')+' auto-logged'),600)}
+</script>
+<script>
+'use strict';
+/* ================= SIGNATURES, DEDUP & BANK PRESETS ================= */
+function txnSig(t){
+  const d=(t.desc||'').toLowerCase().replace(/[^a-z0-9 ]/g,'').replace(/\s+/g,' ').trim();
+  return t.date+'|'+d+'|'+(+t.amount).toFixed(2)+'|'+t.type;
+}
+function markDupes(rows){
+  const seen=new Set(DB.txns.map(t=>t.sig||txnSig(t)));
+  const inFile=new Set();
+  for(const r of rows){r.sig=txnSig(r);r.dupe=seen.has(r.sig)||inFile.has(r.sig);if(r.dupe)r.keep=false;inFile.add(r.sig)}
+}
+function detectPreset(head,filename){
+  const fn=(filename||'').toLowerCase();
+  const idx=n=>head.findIndex(h=>h.includes(n));
+  if(idx('net amount')>=0||fn.includes('cash app')||fn.includes('cashapp')){
+    const nm=idx('name of sender');const nt=idx('notes');const na=idx('net amount');
+    return {name:'Cash App',di:idx('date'),de:nm>=0?nm:idx('name'),de2:nt,am:na>=0?na:idx('amount')};
+  }
+  if(idx('card no')>=0||fn.includes('chime'))return {name:'Chime'};
+  if(fn.includes('citizens')||idx('running bal')>=0)return {name:'Citizens Bank'};
+  if(fn.includes('wisely'))return {name:'Wisely'};
+  return null;
+}
+
+/* ================= SPLIT HELPERS ================= */
+function splitRowHTML(s){
+  const cats=CATS.filter(c=>c[2]===(s?s.type||formType:formType));
+  return `<div class="frow splitrow">
+    <div class="fld"><label>Amount $</label><input class="sAmt" type="number" step="0.01" min="0" placeholder="0.00" value="${s?s.amount:''}" oninput="updSplitSum()"></div>
+    <div class="fld"><label>Category</label><select class="sCat">${cats.map(c=>`<option value="${c[0]}" ${s&&s.cat===c[0]?'selected':''}>${c[1]}</option>`).join('')}</select></div>
+    <div class="fld"><label>Business</label><select class="sBiz">${BIZ.map(b=>`<option value="${b.id}" ${s&&s.biz===b.id?'selected':''}>${b.e} ${b.n}</option>`).join('')}</select></div>
+    <div class="fld"><label>Owner</label><select class="sOwner">${OWNERS.map(o=>`<option value="${o[0]}" ${s&&(s.owner||'joint')===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></div>
+    <div class="fld" style="flex:2"><label>Note</label><input class="sNote" placeholder="what this part was" value="${s?esc(s.note||''):''}"></div>
+    <div class="fld" style="flex:0"><label>&nbsp;</label><button type="button" class="iconbtn" onclick="this.closest('.splitrow').remove();updSplitSum()">✖</button></div>
+  </div>`;
+}
+function addSplitRow(s){$('#splitRows').insertAdjacentHTML('beforeend',splitRowHTML(s||null));updSplitSum()}
+function updSplitSum(){
+  const out=$('#splitSum');if(!out)return;
+  const total=Math.abs(parseFloat(($('#fAmt')||{}).value)||0);
+  const sum=$$('#splitRows .sAmt').reduce((a,i)=>a+(parseFloat(i.value)||0),0);
+  const diff=Math.round((total-sum)*100)/100;
+  out.innerHTML='Lines: <b>'+fmt$(sum)+'</b> of '+fmt$(total)+(Math.abs(diff)<0.011&&total>0?' ✅ balanced':' · remaining <b>'+fmt$(diff)+'</b>');
+  out.style.color=Math.abs(diff)<0.011&&total>0?'var(--grn)':'var(--gold)';
+}
+const _fAmtEl=()=>$('#fAmt');
+document.addEventListener('input',e=>{if(e.target&&e.target.id==='fAmt')updSplitSum()});
+
+/* ================= INDEXEDDB LAYER ================= */
+let _idb=null;
+function idbOpen(){return new Promise((res,rej)=>{
+  if(_idb)return res(_idb);
+  const rq=indexedDB.open('n8books_idb',1);
+  rq.onupgradeneeded=()=>{const db=rq.result;if(!db.objectStoreNames.contains('docs'))db.createObjectStore('docs');if(!db.objectStoreNames.contains('kv'))db.createObjectStore('kv')};
+  rq.onsuccess=()=>{_idb=rq.result;res(_idb)};
+  rq.onerror=()=>rej(rq.error);
+})}
+function idbPut(store,key,val){return idbOpen().then(db=>new Promise((res,rej)=>{const tx=db.transaction(store,'readwrite');tx.objectStore(store).put(val,key);tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error)}))}
+function idbGet(store,key){return idbOpen().then(db=>new Promise((res,rej)=>{const rq=db.transaction(store).objectStore(store).get(key);rq.onsuccess=()=>res(rq.result);rq.onerror=()=>rej(rq.error)}))}
+function idbDel(store,key){return idbOpen().then(db=>new Promise((res,rej)=>{const tx=db.transaction(store,'readwrite');tx.objectStore(store).delete(key);tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error)}))}
+/* migrate any legacy docs (dataUrl in localStorage) into IndexedDB */
+(async()=>{try{
+  let moved=0;
+  for(const d of DB.docs){if(d.dataUrl){await idbPut('docs',d.id,d.dataUrl);d.sizeKB=d.sizeKB||Math.round(d.dataUrl.length*0.75/1024);delete d.dataUrl;moved++}}
+  if(moved){saveDB()}
+}catch(e){}})();
+
+/* ================= GOOGLE DRIVE / FOLDER SAVE (File System Access API) ================= */
+let saveDirHandle=null;
+const fsSupported=()=>typeof window.showDirectoryPicker==='function';
+async function chooseSaveFolder(){
+  if(!fsSupported()){toast('⚠️ This browser can\'t link folders — use Download Backup instead');return}
+  try{saveDirHandle=await showDirectoryPicker();await idbPut('kv','saveDir',saveDirHandle);toast('📁 Folder linked: '+saveDirHandle.name);renderSettings()}
+  catch(e){/* user cancelled */}
+}
+async function saveToFolder(){
+  if(!fsSupported()){backupJSON();return}
+  try{
+    if(!saveDirHandle)saveDirHandle=await idbGet('kv','saveDir');
+    if(!saveDirHandle){toast('Pick a folder first 📁');return}
+    const perm=await saveDirHandle.requestPermission({mode:'readwrite'});
+    if(perm!=='granted'){toast('⚠️ Folder permission not granted');return}
+    const write=async(name,text)=>{const fh=await saveDirHandle.getFileHandle(name,{create:true});const w=await fh.createWritable();await w.write(text);await w.close()};
+    await write('N8Books-Backup.json',JSON.stringify(DB,null,2));
+    const tx=yearTxns().sort((a,b)=>a.date.localeCompare(b.date));
+    const rows=[['Date','Description','Type','Category','Business','Owner','Method','Amount']];
+    tx.forEach(t=>rows.push([t.date,t.desc,t.type,catName(t.cat),bizName(t.biz),ownerName(t.owner),t.method||'',(t.type==='income'?t.amount:-t.amount).toFixed(2)]));
+    await write('N8Books-'+curYear+'.csv',rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(',')).join('\n'));
+    toast('☁️ Saved N8Books-Backup.json + '+curYear+' CSV to "'+saveDirHandle.name+'"');
+  }catch(e){toast('⚠️ Save failed: '+e.message)}
+}
+function drivePanelHTML(){
+  return `<div class="panel reveal in"><h2>☁️ One-Click Save to a Folder / Google Drive</h2>
+  <p class="hint">${fsSupported()
+    ?'Link a folder once — e.g. your <b>Google Drive sync folder</b> (My Drive via Google Drive for Desktop), a USB stick, anywhere — then one click writes your backup JSON + this year\'s CSV straight into it.'
+    :'⚠️ This browser doesn\'t support folder linking (File System Access API — works in Chrome/Edge on desktop). On this device, use <b>Download Backup</b> above and drop the file in Drive manually.'}</p>
+  <div class="kv"><span>Folder linked</span><b id="saveDirName">${saveDirHandle?esc(saveDirHandle.name):'not yet — checking…'}</b></div>
+  <div class="kv"><span>Browser storage used</span><b id="storageEst">…</b></div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
+    <button class="btn" onclick="chooseSaveFolder()">📁 Link a Folder</button>
+    <button class="btn" onclick="saveToFolder()">☁️ Save Backup + CSV to Folder</button>
+  </div></div>`;
+}
+const _renderSettingsV2=renderSettings;
+renderSettings=function(){_renderSettingsV2();$('#page-settings').insertAdjacentHTML('beforeend',drivePanelHTML());watchReveals();
+  idbGet('kv','saveDir').then(h=>{if(h){saveDirHandle=h;const el=$('#saveDirName');if(el)el.textContent=h.name}else{const el=$('#saveDirName');if(el)el.textContent='none yet'}}).catch(()=>{});
+  if(navigator.storage&&navigator.storage.estimate)navigator.storage.estimate().then(e=>{const el=$('#storageEst');if(el)el.textContent=(e.usage?(e.usage/1048576).toFixed(1)+' MB':'?')+' of ~'+(e.quota?Math.round(e.quota/1073741824*10)/10+' GB':'?')+' available (IndexedDB + local)'});
+};
+</script>
+<script>
+'use strict';
+/* ================= PWA: SERVICE WORKER + INSTALL ================= */
+if('serviceWorker' in navigator&&location.protocol.startsWith('http')){
+  addEventListener('load',()=>{navigator.serviceWorker.register('sw.js').catch(()=>{})});
+}
+let _installPrompt=null;
+addEventListener('beforeinstallprompt',e=>{e.preventDefault();_installPrompt=e;const b=$('#installBtn');if(b)b.style.display='';const h=$('#installHint');if(h)h.textContent='Tap Install — N8Books will live on your home screen like a real app. 📲'});
+addEventListener('appinstalled',()=>{_installPrompt=null;toast('🎉 N8Books installed! Check your home screen.')});
+async function installApp(){
+  if(_installPrompt){_installPrompt.prompt();const r=await _installPrompt.userChoice;if(r.outcome==='accepted')toast('📲 Installing…');_installPrompt=null;return}
+  if(matchMedia('(display-mode: standalone)').matches){toast('✅ Already installed — you\'re running the app right now!');return}
+  toast('📲 Use your browser menu → "Install app" or "Add to Home screen"');
+}
+function installPanelHTML(){
+  const standalone=matchMedia('(display-mode: standalone)').matches;
+  return `<div class="panel reveal in"><h2>📲 Install N8Books as an App</h2>
+  <p class="hint" id="installHint">${standalone?'✅ You\'re running the installed app right now — full screen, no browser bars.':'Install it on your phone and it opens full-screen from your home screen with the 💎 icon — a real app, not a browser shortcut. Works offline too: your books are stored on the device.'}</p>
+  ${standalone?'':'<button class="btn" id="installBtn" onclick="installApp()">📲 Install N8Books</button>'}
+  <p class="hint" style="margin-top:10px">On Android Chrome you can also use ⋮ menu → <b>Install app</b>. On iPhone: Share → <b>Add to Home Screen</b>.</p></div>`;
+}
+const _renderSettingsV3=renderSettings;
+renderSettings=function(){_renderSettingsV3();$('#page-settings').insertAdjacentHTML('afterbegin',installPanelHTML());watchReveals()};
+</script>
+</body>
+</html>
