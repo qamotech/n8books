@@ -5,6 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>N8Books — Books Without the Bookkeeper</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%92%8E%3C/text%3E%3C/svg%3E">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0a0e1a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="N8Books">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <style>
 :root{
   --bg:#0a0e1a; --bg2:#0f1526; --panel:#131b31; --panel2:#18223c; --line:#24304f;
@@ -1460,6 +1467,183 @@ renderSettings=function(){_renderSettingsV2();$('#page-settings').insertAdjacent
   idbGet('kv','saveDir').then(h=>{if(h){saveDirHandle=h;const el=$('#saveDirName');if(el)el.textContent=h.name}else{const el=$('#saveDirName');if(el)el.textContent='none yet'}}).catch(()=>{});
   if(navigator.storage&&navigator.storage.estimate)navigator.storage.estimate().then(e=>{const el=$('#storageEst');if(el)el.textContent=(e.usage?(e.usage/1048576).toFixed(1)+' MB':'?')+' of ~'+(e.quota?Math.round(e.quota/1073741824*10)/10+' GB':'?')+' available (IndexedDB + local)'});
 };
+</script>
+<script>
+'use strict';
+/* ================= PWA: SERVICE WORKER + INSTALL ================= */
+if('serviceWorker' in navigator&&location.protocol.startsWith('http')){
+  addEventListener('load',()=>{navigator.serviceWorker.register('sw.js').catch(()=>{})});
+}
+let _installPrompt=null;
+addEventListener('beforeinstallprompt',e=>{e.preventDefault();_installPrompt=e;const b=$('#installBtn');if(b)b.style.display='';const h=$('#installHint');if(h)h.textContent='Tap Install — N8Books will live on your home screen like a real app. 📲'});
+addEventListener('appinstalled',()=>{_installPrompt=null;toast('🎉 N8Books installed! Check your home screen.')});
+async function installApp(){
+  if(_installPrompt){_installPrompt.prompt();const r=await _installPrompt.userChoice;if(r.outcome==='accepted')toast('📲 Installing…');_installPrompt=null;return}
+  if(matchMedia('(display-mode: standalone)').matches){toast('✅ Already installed — you\'re running the app right now!');return}
+  toast('📲 Use your browser menu → "Install app" or "Add to Home screen"');
+}
+function installPanelHTML(){
+  const standalone=matchMedia('(display-mode: standalone)').matches;
+  return `<div class="panel reveal in"><h2>📲 Install N8Books as an App</h2>
+  <p class="hint" id="installHint">${standalone?'✅ You\'re running the installed app right now — full screen, no browser bars.':'Install it on your phone and it opens full-screen from your home screen with the 💎 icon — a real app, not a browser shortcut. Works offline too: your books are stored on the device.'}</p>
+  ${standalone?'':'<button class="btn" id="installBtn" onclick="installApp()">📲 Install N8Books</button>'}
+  <p class="hint" style="margin-top:10px">On Android Chrome you can also use ⋮ menu → <b>Install app</b>. On iPhone: Share → <b>Add to Home Screen</b>.</p></div>`;
+}
+const _renderSettingsV3=renderSettings;
+renderSettings=function(){_renderSettingsV3();$('#page-settings').insertAdjacentHTML('afterbegin',installPanelHTML());watchReveals()};
+</script>
+<script>
+'use strict';
+/* ================= GOOGLE DRIVE SYNC ================= */
+const DRIVE_DEFAULT_CLIENT_ID='578121971085-9rl16gfo1iid9qcbsvdmkokdpsavnt13.apps.googleusercontent.com';
+const DRIVE_FILE_NAME='N8Books-Backup.json';
+function drv(){DB.settings.drive=DB.settings.drive||{enabled:false,auto:true,fileId:'',lastSave:'',email:''};return DB.settings.drive}
+function driveClientId(){return (DB.settings.driveClientId||'').trim()||DRIVE_DEFAULT_CLIENT_ID}
+let _drvToken=null,_drvTokenExp=0,_drvClient=null,_drvSaveTimer=null;
+function loadGIS(){
+  return new Promise((res,rej)=>{
+    if(window.google&&google.accounts&&google.accounts.oauth2)return res();
+    const s=document.createElement('script');s.src='https://accounts.google.com/gsi/client';
+    s.onload=()=>res();s.onerror=()=>rej(new Error('Could not load Google sign-in'));
+    document.head.appendChild(s);
+  });
+}
+async function driveEnsureClient(){
+  const cid=driveClientId();
+  if(!cid)throw new Error('NO_CLIENT_ID');
+  await loadGIS();
+  if(!_drvClient){
+    _drvClient=google.accounts.oauth2.initTokenClient({
+      client_id:cid,scope:'https://www.googleapis.com/auth/drive.file',
+      callback:()=>{},
+    });
+  }
+  return _drvClient;
+}
+function driveGetToken(interactive){
+  return new Promise(async(res,rej)=>{
+    if(_drvToken&&Date.now()<_drvTokenExp-30000)return res(_drvToken);
+    try{
+      const client=await driveEnsureClient();
+      client.callback=(resp)=>{
+        if(resp.error)return rej(new Error(resp.error));
+        _drvToken=resp.access_token;_drvTokenExp=Date.now()+(resp.expires_in||3600)*1000;res(_drvToken);
+      };
+      client.requestAccessToken({prompt:interactive?'consent':''});
+    }catch(e){rej(e)}
+  });
+}
+async function driveApi(path,opts){
+  const tok=await driveGetToken(false);
+  const r=await fetch('https://www.googleapis.com'+path,{...(opts||{}),headers:{'Authorization':'Bearer '+tok,...((opts&&opts.headers)||{})}});
+  if(r.status===401){_drvToken=null;const t2=await driveGetToken(false);const r2=await fetch('https://www.googleapis.com'+path,{...(opts||{}),headers:{'Authorization':'Bearer '+t2,...((opts&&opts.headers)||{})}});if(!r2.ok)throw new Error('Drive API '+r2.status);return r2}
+  if(!r.ok)throw new Error('Drive API '+r.status);
+  return r;
+}
+async function driveFindFile(){
+  const d=drv();if(d.fileId)return d.fileId;
+  const r=await driveApi('/drive/v3/files?q='+encodeURIComponent("name='"+DRIVE_FILE_NAME+"' and trashed=false")+'&fields=files(id,name,modifiedTime)');
+  const j=await r.json();
+  if(j.files&&j.files.length){d.fileId=j.files[0].id;return d.fileId}
+  return '';
+}
+async function driveSaveNow(manual){
+  const d=drv();
+  try{
+    if(!driveClientId()){if(manual)toast('⚠️ Drive sync needs its Google key first — see Settings');return false}
+    if(manual||!_drvToken)await driveGetToken(!!manual);
+    const payload=JSON.stringify({app:'N8Books',version:3,savedAt:new Date().toISOString(),data:DB},null,2);
+    let fid=await driveFindFile();
+    if(fid){
+      const tok=await driveGetToken(false);
+      const r=await fetch('https://www.googleapis.com/upload/drive/v3/files/'+fid+'?uploadType=media',{method:'PATCH',headers:{'Authorization':'Bearer '+tok,'Content-Type':'application/json'},body:payload});
+      if(!r.ok)throw new Error('Upload '+r.status);
+    }else{
+      const tok=await driveGetToken(false);
+      const meta=await fetch('https://www.googleapis.com/drive/v3/files',{method:'POST',headers:{'Authorization':'Bearer '+tok,'Content-Type':'application/json'},body:JSON.stringify({name:DRIVE_FILE_NAME,mimeType:'application/json'})});
+      if(!meta.ok)throw new Error('Create '+meta.status);
+      fid=(await meta.json()).id;d.fileId=fid;
+      const r=await fetch('https://www.googleapis.com/upload/drive/v3/files/'+fid+'?uploadType=media',{method:'PATCH',headers:{'Authorization':'Bearer '+tok,'Content-Type':'application/json'},body:payload});
+      if(!r.ok)throw new Error('Upload '+r.status);
+    }
+    d.lastSave=new Date().toLocaleString();_saveDBBase();
+    if(manual)toast('☁️ Books saved to Google Drive!');
+    return true;
+  }catch(e){
+    if(manual)toast('⚠️ Drive save failed: '+e.message);
+    return false;
+  }
+}
+async function driveConnect(){
+  const d=drv();
+  if(!driveClientId()){toast('⚠️ The Google key isn\'t in the app yet');return}
+  try{
+    await driveGetToken(true);
+    const r=await driveApi('/drive/v3/about?fields=user(emailAddress)');
+    const j=await r.json();d.email=(j.user&&j.user.emailAddress)||'';
+    d.enabled=true;_saveDBBase();
+    toast('☁️ Drive connected'+(d.email?' as '+d.email:'')+'!');
+    await driveSaveNow(false);
+    renderSettings();
+  }catch(e){toast('⚠️ Connect failed: '+e.message)}
+}
+function driveDisconnect(){
+  const d=drv();d.enabled=false;d.email='';_drvToken=null;
+  if(window.google&&google.accounts&&google.accounts.oauth2&&_drvToken)google.accounts.oauth2.revoke(_drvToken);
+  _saveDBBase();toast('Drive disconnected (the backup file stays in your Drive)');renderSettings();
+}
+function driveLoadConfirm(){
+  openModal(`<h3>☁️ Restore from Drive?</h3>
+  <p style="color:var(--mut);margin-bottom:16px">This replaces the books on THIS device with the backup saved in Google Drive${drv().lastSave?' (last saved '+esc(drv().lastSave)+')':''}. Anything only on this device and not yet saved will be lost.</p>
+  <div style="display:flex;gap:10px;justify-content:flex-end"><button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" onclick="closeModal();driveLoadNow()">☁️ Restore</button></div>`);
+}
+async function driveLoadNow(){
+  try{
+    await driveGetToken(true);
+    const fid=await driveFindFile();
+    if(!fid){toast('⚠️ No N8Books backup found in this Drive account');return}
+    const r=await driveApi('/drive/v3/files/'+fid+'?alt=media');
+    const j=await r.json();
+    if(!j||!j.data||!Array.isArray(j.data.txns))throw new Error('Backup file looks wrong');
+    DB=j.data;DB.settings.drive=Object.assign(drv(),{enabled:true});
+    _saveDBBase();fillYears();toast('☁️ Books restored from Drive!');go('dash');
+  }catch(e){toast('⚠️ Restore failed: '+e.message)}
+}
+function scheduleDriveSave(){
+  const d=drv();
+  if(!d.enabled||!d.auto||!driveClientId())return;
+  clearTimeout(_drvSaveTimer);
+  _drvSaveTimer=setTimeout(()=>{driveSaveNow(false)},6000);
+}
+/* hook auto-save into every local save */
+const _saveDBBase=saveDB;
+saveDB=function(){_saveDBBase();scheduleDriveSave()};
+function driveSaveClientId(){
+  const v=$('#drvCid').value.trim();DB.settings.driveClientId=v;_saveDBBase();_drvClient=null;
+  toast(v?'🔑 Google key saved! Now tap Connect Drive.':'Key cleared');renderSettings();
+}
+function drivePanelHTML2(){
+  const d=drv();const cid=driveClientId();
+  return `<div class="panel reveal in"><h2>☁️ Google Drive Sync — your books live in Drive</h2>
+  ${!cid?`<p class="hint">Drive sync needs a Google OAuth key for the app. Paste it below (N8 is setting this up — once it's baked in, this box disappears and it's just one Connect tap).</p>
+  <div class="frow"><div class="fld" style="flex:2"><label>Google OAuth Client ID</label><input id="drvCid" placeholder="…apps.googleusercontent.com" value="${esc(DB.settings.driveClientId||'')}"></div>
+  <div class="fld" style="flex:0"><label>&nbsp;</label><button class="btn" onclick="driveSaveClientId()">💾 Save Key</button></div></div>`
+  :d.enabled?`<div class="kv"><span>Status</span><b class="pos">✅ Connected${d.email?' — '+esc(d.email):''}</b></div>
+  <div class="kv"><span>Backup file</span><b>${DRIVE_FILE_NAME} (in My Drive)</b></div>
+  <div class="kv"><span>Last saved</span><b>${d.lastSave?esc(d.lastSave):'not yet'}</b></div>
+  <div class="kv"><span>Auto-save</span><b>${d.auto?'✅ On — saves a few seconds after every change':'Off'}</b></div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
+    <button class="btn" onclick="driveSaveNow(true)">☁️ Save to Drive Now</button>
+    <button class="btn ghost" onclick="driveLoadConfirm()">⬇️ Restore from Drive</button>
+    <button class="btn ghost" onclick="drv().auto=!drv().auto;_saveDBBase();renderSettings()">${d.auto?'⏸ Turn Auto-Save Off':'▶️ Turn Auto-Save On'}</button>
+    <button class="btn ghost" onclick="driveDisconnect()">Disconnect</button>
+  </div>`
+  :`<p class="hint">Connect once and N8Books keeps a backup of your books in your Google Drive automatically — open it on any device, restore, done. The app can only see the one backup file it creates (drive.file permission).</p>
+  <button class="btn" onclick="driveConnect()">☁️ Connect Google Drive</button>`}
+  </div>`;
+}
+const _renderSettingsV4=renderSettings;
+renderSettings=function(){_renderSettingsV4();$('#page-settings').insertAdjacentHTML('afterbegin',drivePanelHTML2());watchReveals()};
 </script>
 </body>
 </html>
