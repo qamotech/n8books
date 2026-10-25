@@ -456,8 +456,8 @@ function renderDash(){
     </div>
   </div>
   <div class="panel reveal"><h2>🕐 Recent Activity</h2>
-    ${recent.length?`<div class="twrap"><table><tr><th>Date</th><th>Description</th><th>Category</th><th>Business</th><th style="text-align:right">Amount</th></tr>
-    ${recent.map(t=>`<tr><td>${t.date}</td><td>${esc(t.desc)}</td><td><span class="chip">${catName(t.cat)}</span></td><td>${bizName(t.biz)}</td><td class="amt ${t.type==='income'?'pos':'neg'}">${t.type==='income'?'+':'-'}${fmt$(t.amount)}</td></tr>`).join('')}</table></div>`:'<p class="empty">Nothing yet — add your first transaction or import a bank file. 🚀</p>'}
+    ${recent.length?`<div class="twrap"><table><tr><th>Date</th><th>Description</th><th>Category</th><th>Business</th><th style="text-align:right">Amount</th><th></th></tr>
+    ${recent.map(t=>`<tr><td>${t.date}</td><td>${esc(t.desc)}</td><td><span class="chip">${catName(t.cat)}</span></td><td>${bizName(t.biz)}</td><td class="amt ${t.type==='income'?'pos':'neg'}">${t.type==='income'?'+':'-'}${fmt$(t.amount)}</td><td style="white-space:nowrap">${t.docId?`<button class="iconbtn" title="View attached receipt" onclick="viewDoc('${t.docId}')">📎</button> `:''}<button class="iconbtn" title="Edit this entry" onclick="openEdit('${t.id}')">✏️</button></td></tr>`).join('')}</table></div>`:'<p class="empty">Nothing yet — add your first transaction or import a bank file. 🚀</p>'}
   </div>`;
   $$('#page-dash [data-count]').forEach(el=>countUp(el,+el.dataset.count));
   drawFlowChart($('#chFlow'),tx);drawDonut($('#chDonut'),top,T.exp);
@@ -610,14 +610,16 @@ function currentPage(){const b=$$('#navlinks button').find(x=>x.classList.contai
 /* ================= TRANSACTIONS PAGE ================= */
 let txFilter={q:'',biz:'all',cat:'all',type:'all',owner:'all',sort:'date',dir:-1,page:0};
 function renderTxns(){
-  const all=yearTxns();
+  /* Searching looks across ALL years — a mis-dated entry lands in the wrong
+     year, and you still need to be able to find it to fix it. */
+  const all=txFilter.q?DB.txns:yearTxns();
   let list=all.filter(t=>(txFilter.biz==='all'||t.biz===txFilter.biz)&&(txFilter.cat==='all'||t.cat===txFilter.cat)&&(txFilter.type==='all'||t.type===txFilter.type)&&(txFilter.owner==='all'||(t.owner||'joint')===txFilter.owner)&&(!txFilter.q||(t.desc+' '+t.note+' '+catName(t.cat)).toLowerCase().includes(txFilter.q)));
   list.sort((a,b)=>{const k=txFilter.sort;let r=k==='amount'?a.amount-b.amount:a[k].localeCompare(b[k]);return r*txFilter.dir});
   const PER=15,pages=Math.max(1,Math.ceil(list.length/PER));txFilter.page=Math.min(txFilter.page,pages-1);
   const page=list.slice(txFilter.page*PER,txFilter.page*PER+PER);
   const T=totals(list);
   $('#page-txns').innerHTML=`
-  <div class="panel reveal in"><h2>🧾 Transactions — ${curYear}</h2><p class="hint">${list.length} shown · In ${fmt$(T.inc)} · Out ${fmt$(T.exp)} · Net ${fmt$(T.net)}</p>
+  <div class="panel reveal in"><h2>🧾 Transactions — ${txFilter.q?'All Years 🔍':curYear}</h2><p class="hint">${list.length} shown · In ${fmt$(T.inc)} · Out ${fmt$(T.exp)} · Net ${fmt$(T.net)}${txFilter.q?' · 🔍 Searching <b>all years</b> — handy for finding a mis-dated entry to edit. Clear the search to go back to '+curYear+'.':''}</p>
     <div class="frow">
       <div class="fld" style="flex:2"><label>Search</label><input id="txQ" placeholder="Search descriptions…" value="${esc(txFilter.q)}"></div>
       <div class="fld"><label>Business</label><select id="txBiz"><option value="all">All businesses</option>${BIZ.map(b=>`<option value="${b.id}" ${txFilter.biz===b.id?'selected':''}>${b.e} ${b.n}</option>`).join('')}</select></div>
@@ -811,29 +813,30 @@ function renderMileage(){
     <button class="btn" onclick="openMileage()">➕ Log a Trip</button>
     ${ms.length?`<div class="twrap" style="margin-top:14px"><table><tr><th>Date</th><th>Purpose / Route</th><th>Business</th><th style="text-align:right">Miles</th><th style="text-align:right">Value</th><th></th></tr>
     ${ms.map(m=>`<tr><td>${m.date}</td><td>${esc(m.purpose)}</td><td>${bizName(m.biz)}</td><td class="amt">${m.miles}</td><td class="amt gold">${fmt$(m.miles*(MILEAGE_RATES[yrOf(m.date)]||0.7))}</td>
-    <td style="white-space:nowrap">${m.docId?`<button class="iconbtn" title="View attached photo" onclick="viewDoc('${m.docId}')">📎</button> `:''}<button class="iconbtn" onclick="delMile('${m.id}')">🗑</button></td></tr>`).join('')}</table></div>`:'<p class="empty">No trips logged for '+curYear+' yet.</p>'}
+    <td style="white-space:nowrap"><button class="iconbtn" title="Edit this trip" onclick="openMileage('${m.id}')">✏️</button> ${m.docId?`<button class="iconbtn" title="View attached photo" onclick="viewDoc('${m.docId}')">📎</button> `:''}<button class="iconbtn" onclick="delMile('${m.id}')">🗑</button></td></tr>`).join('')}</table></div>`:'<p class="empty">No trips logged for '+curYear+' yet.</p>'}
   </div>`;
   watchReveals();
 }
-function openMileage(){
-  openModal(`<h3>🚗 Log a Trip</h3><form id="mileForm">
-    <div class="frow"><div class="fld"><label>Date</label><input type="date" id="mDate" required value="${todayStr()}"></div>
-    <div class="fld"><label>Miles</label><input type="number" id="mMiles" step="0.1" min="0" required placeholder="e.g. 42"></div></div>
-    <div class="frow"><div class="fld" style="flex:2"><label>Purpose / Route</label><input id="mPurpose" required placeholder="e.g. Home → Home Depot → tile job (Erika)"></div>
-    <div class="fld"><label>Business</label><select id="mBiz">${BIZ.map(b=>`<option value="${b.id}">${b.e} ${b.n}</option>`).join('')}</select></div></div>
-    ${photoBoxHTML(null,'Snap the odometer, a gas receipt, the job site — it saves to the Vault with this trip.')}
-    <div style="display:flex;gap:10px;justify-content:flex-end"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn">💾 Save Trip</button></div>
+function openMileage(id){
+  const m=id?DB.mileage.find(x=>x.id===id):null;
+  openModal(`<h3>${m?'✏️ Edit Trip':'🚗 Log a Trip'}</h3><form id="mileForm">
+    <div class="frow"><div class="fld"><label>Date</label><input type="date" id="mDate" required value="${m?m.date:todayStr()}"></div>
+    <div class="fld"><label>Miles</label><input type="number" id="mMiles" step="0.1" min="0" required placeholder="e.g. 42" value="${m?m.miles:''}"></div></div>
+    <div class="frow"><div class="fld" style="flex:2"><label>Purpose / Route</label><input id="mPurpose" required placeholder="e.g. Home → Home Depot → tile job (Erika)" value="${m?esc(m.purpose):''}"></div>
+    <div class="fld"><label>Business</label><select id="mBiz">${BIZ.map(b=>`<option value="${b.id}" ${m&&m.biz===b.id?'selected':''}>${b.e} ${b.n}</option>`).join('')}</select></div></div>
+    ${photoBoxHTML(m?m.docId:null,'Snap the odometer, a gas receipt, the job site — it saves to the Vault with this trip.')}
+    <div style="display:flex;gap:10px;justify-content:flex-end"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn">${m?'💾 Save Changes':'💾 Save Trip'}</button></div>
   </form>`);
   wirePhotoBox();
   $('#mileForm').addEventListener('submit',async e=>{e.preventDefault();
-    const mid=uid();
     const docId=await persistStagedPhoto();
     if(stagedPhoto&&!docId)toast('⚠️ Photo could not be stored on this device — trip still saved');
-    const entry={id:mid,date:$('#mDate').value,miles:parseFloat($('#mMiles').value)||0,purpose:$('#mPurpose').value.trim(),biz:$('#mBiz').value};
-    if(docId){entry.docId=docId;registerPhotoDoc(docId,{name:'Trip photo — '+entry.purpose,type:'Receipt',biz:entry.biz,year:yrOf(entry.date),linkId:mid})}
+    const data={date:$('#mDate').value,miles:parseFloat($('#mMiles').value)||0,purpose:$('#mPurpose').value.trim(),biz:$('#mBiz').value};
+    if(docId)data.docId=docId;
+    if(m){Object.assign(m,data);if(docId)registerPhotoDoc(docId,{name:'Trip photo — '+data.purpose,type:'Receipt',biz:data.biz,year:yrOf(data.date),linkId:m.id})}
+    else{const mid=uid();DB.mileage.push({id:mid,...data});if(docId)registerPhotoDoc(docId,{name:'Trip photo — '+data.purpose,type:'Receipt',biz:data.biz,year:yrOf(data.date),linkId:mid})}
     stagedPhoto=null;
-    DB.mileage.push(entry);
-    saveDB();fillYears();closeModal();toast('🚗 Trip logged!');render(currentPage())});
+    saveDB();fillYears();closeModal();toast(m?'✏️ Trip updated!':'🚗 Trip logged!');render(currentPage())});
 }
 function delMile(id){DB.mileage=DB.mileage.filter(m=>m.id!==id);saveDB();toast('🗑 Deleted');renderMileage()}
 
@@ -1286,7 +1289,7 @@ function renderTaxHQ(){
     <div class="cards">${qCards}</div>
     <button class="btn" onclick="openTaxPayment()">➕ Log a Tax Payment</button>
     ${pays.length?`<div class="twrap" style="margin-top:14px"><table><tr><th>Date</th><th>Paid To</th><th>Quarter</th><th style="text-align:right">Amount</th><th></th></tr>
-    ${pays.sort((a,b)=>b.date.localeCompare(a.date)).map(p=>`<tr><td>${p.date}</td><td>${p.to==='IRS'?'🇺🇸 IRS (federal)':'🦀 Maryland'}</td><td>Q${p.quarter}</td><td class="amt">${fmt$(p.amount)}</td><td style="white-space:nowrap">${p.docId?`<button class="iconbtn" title="View attached photo" onclick="viewDoc('${p.docId}')">📎</button> `:''}<button class="iconbtn" onclick="delTaxPayment('${p.id}')">🗑</button></td></tr>`).join('')}</table></div>`:''}
+    ${pays.sort((a,b)=>b.date.localeCompare(a.date)).map(p=>`<tr><td>${p.date}</td><td>${p.to==='IRS'?'🇺🇸 IRS (federal)':'🦀 Maryland'}</td><td>Q${p.quarter}</td><td class="amt">${fmt$(p.amount)}</td><td style="white-space:nowrap"><button class="iconbtn" title="Edit this payment" onclick="openTaxPayment('${p.id}')">✏️</button> ${p.docId?`<button class="iconbtn" title="View attached photo" onclick="viewDoc('${p.docId}')">📎</button> `:''}<button class="iconbtn" onclick="delTaxPayment('${p.id}')">🗑</button></td></tr>`).join('')}</table></div>`:''}
   </div>
   <div class="panel reveal in"><h2>📄 Document Vault — ${curYear}</h2>
     <p class="hint">W-2s, 1099s, receipts, contracts — stored in this browser's <b>IndexedDB</b> (way beyond the old 5MB localStorage cap), tagged by year and business. Photos are compressed to WebP. Note: document files live on this device and don't travel with JSON backups — keep originals of big items in Drive too. Vault holds ${DB.docs.length} documents (${Object.entries(byType).map(([k,v])=>k+': '+v).join(' · ')||'none this year'}).</p>
@@ -1301,6 +1304,7 @@ function renderTaxHQ(){
       ${d.mime.startsWith('image')?`<img data-docimg="${d.id}" alt="document" style="width:100%;border-radius:10px;margin-top:8px;max-height:180px;object-fit:cover;background:var(--panel2)">`:''}
       <div style="display:flex;gap:8px;margin-top:10px">
         <button class="btn small" onclick="viewDoc('${d.id}')">👁 View</button>
+        <button class="btn ghost small" onclick="openDocEdit('${d.id}')">✏️ Edit</button>
         <button class="btn ghost small" onclick="delDoc('${d.id}')">🗑 Delete</button>
       </div></div>`).join('')||'<p class="empty">No documents stored for '+curYear+' yet.</p>'}
     </div>
@@ -1314,25 +1318,27 @@ function renderTaxHQ(){
   hydrateDocImages();
   watchReveals();
 }
-function openTaxPayment(){
-  openModal(`<h3>💸 Log Estimated Tax Payment</h3><form id="tpForm">
-    <div class="frow"><div class="fld"><label>Date Paid</label><input type="date" id="tpDate" required value="${todayStr()}"></div>
-    <div class="fld"><label>Amount ($)</label><input type="number" id="tpAmt" step="0.01" min="0" required placeholder="0.00"></div></div>
-    <div class="frow"><div class="fld"><label>Paid To</label><select id="tpTo"><option value="IRS">🇺🇸 IRS (federal)</option><option value="MD">🦀 Maryland</option></select></div>
-    <div class="fld"><label>For Quarter</label><select id="tpQ">${[1,2,3,4].map(q=>`<option value="${q}">Q${q} ${curYear}</option>`).join('')}</select></div></div>
-    ${photoBoxHTML(null,'Snap the IRS / Maryland confirmation screen or the cancelled check — it saves to the Vault with this payment.')}
-    <div style="display:flex;gap:10px;justify-content:flex-end"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn">💾 Save Payment</button></div>
+function openTaxPayment(id){
+  const p=id?DB.taxPayments.find(x=>x.id===id):null;
+  openModal(`<h3>${p?'✏️ Edit Tax Payment':'💸 Log Estimated Tax Payment'}</h3><form id="tpForm">
+    <div class="frow"><div class="fld"><label>Date Paid</label><input type="date" id="tpDate" required value="${p?p.date:todayStr()}"></div>
+    <div class="fld"><label>Amount ($)</label><input type="number" id="tpAmt" step="0.01" min="0" required placeholder="0.00" value="${p?p.amount:''}"></div></div>
+    <div class="frow"><div class="fld"><label>Paid To</label><select id="tpTo"><option value="IRS" ${p&&p.to==='IRS'?'selected':''}>🇺🇸 IRS (federal)</option><option value="MD" ${p&&p.to==='MD'?'selected':''}>🦀 Maryland</option></select></div>
+    <div class="fld"><label>For Quarter</label><select id="tpQ">${[1,2,3,4].map(q=>`<option value="${q}" ${p&&p.quarter===q?'selected':''}>Q${q} ${p?p.year:curYear}</option>`).join('')}</select></div></div>
+    ${photoBoxHTML(p?p.docId:null,'Snap the IRS / Maryland confirmation screen or the cancelled check — it saves to the Vault with this payment.')}
+    <div style="display:flex;gap:10px;justify-content:flex-end"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn">${p?'💾 Save Changes':'💾 Save Payment'}</button></div>
   </form>`);
   wirePhotoBox();
   $('#tpForm').addEventListener('submit',async e=>{e.preventDefault();
-    const pid=uid();
     const docId=await persistStagedPhoto();
     if(stagedPhoto&&!docId)toast('⚠️ Photo could not be stored on this device — payment still saved');
-    const entry={id:pid,date:$('#tpDate').value,amount:parseFloat($('#tpAmt').value)||0,to:$('#tpTo').value,quarter:+$('#tpQ').value,year:curYear};
-    if(docId){entry.docId=docId;registerPhotoDoc(docId,{name:'Tax payment proof — '+(entry.to==='IRS'?'IRS':'Maryland')+' Q'+entry.quarter+' '+entry.year,type:'Other',biz:'per',year:entry.year,linkId:pid})}
+    const data={date:$('#tpDate').value,amount:parseFloat($('#tpAmt').value)||0,to:$('#tpTo').value,quarter:+$('#tpQ').value};
+    data.year=yrOf(data.date);
+    if(docId)data.docId=docId;
+    if(p){Object.assign(p,data);if(docId)registerPhotoDoc(docId,{name:'Tax payment proof — '+(data.to==='IRS'?'IRS':'Maryland')+' Q'+data.quarter+' '+data.year,type:'Other',biz:'per',year:data.year,linkId:p.id})}
+    else{const pid=uid();DB.taxPayments.push({id:pid,...data});if(docId)registerPhotoDoc(docId,{name:'Tax payment proof — '+(data.to==='IRS'?'IRS':'Maryland')+' Q'+data.quarter+' '+data.year,type:'Other',biz:'per',year:data.year,linkId:pid})}
     stagedPhoto=null;
-    DB.taxPayments.push(entry);
-    saveDB();closeModal();toast('💸 Payment logged!');renderTaxHQ()});
+    saveDB();fillYears();closeModal();toast(p?'✏️ Payment updated!':'💸 Payment logged!');renderTaxHQ()});
 }
 function delTaxPayment(id){DB.taxPayments=DB.taxPayments.filter(p=>p.id!==id);saveDB();renderTaxHQ()}
 let stagedDoc=null;
@@ -1392,6 +1398,20 @@ async function hydrateDocImages(){
   }
 }
 function delDoc(id){DB.docs=DB.docs.filter(x=>x.id!==id);saveDB();idbDel('docs',id).catch(()=>{});toast('🗑 Document deleted');renderTaxHQ()}
+function openDocEdit(id){
+  const d=DB.docs.find(x=>x.id===id);if(!d)return;
+  openModal(`<h3>✏️ Edit Document Info</h3><form id="docEditForm">
+    <div class="frow"><div class="fld" style="flex:2"><label>Display Name</label><input id="edName" value="${esc(d.name)}"></div>
+    <div class="fld"><label>Document Type</label><select id="edType">${['Receipt','W-2','1099-NEC','1099-MISC','Bank Statement','Contract','Other'].map(t=>`<option ${d.type===t?'selected':''}>${t}</option>`).join('')}</select></div></div>
+    <div class="frow"><div class="fld"><label>Business</label><select id="edBiz">${BIZ.map(b=>`<option value="${b.id}" ${d.biz===b.id?'selected':''}>${b.e} ${b.n}</option>`).join('')}</select></div>
+    <div class="fld"><label>Tax Year</label><input type="number" id="edYear" value="${d.year}"></div></div>
+    <p class="hint">This edits the name and tags only — the stored file itself doesn't change.</p>
+    <div style="display:flex;gap:10px;justify-content:flex-end"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn">💾 Save Changes</button></div>
+  </form>`);
+  $('#docEditForm').addEventListener('submit',e=>{e.preventDefault();
+    d.name=$('#edName').value.trim()||d.name;d.type=$('#edType').value;d.biz=$('#edBiz').value;d.year=+$('#edYear').value||d.year;
+    saveDB();fillYears();closeModal();toast('✏️ Document updated!');renderTaxHQ()});
+}
 </script>
 <script>
 'use strict';
@@ -1429,34 +1449,37 @@ function recurringPanelHTML(){
   ${DB.recurring.length?`<div class="twrap" style="margin-top:14px"><table><tr><th>Description</th><th>Type</th><th>Category</th><th>Every</th><th>Next Due</th><th style="text-align:right">Amount</th><th>Status</th><th></th></tr>
   ${DB.recurring.map(r=>`<tr><td>${esc(r.desc)}</td><td>${r.type==='income'?'💰 Income':'🧾 Expense'}</td><td>${catName(r.cat)}</td><td>${freqName(r.freq)}</td><td>${r.nextDate}</td>
   <td class="amt ${r.type==='income'?'pos':'neg'}">${fmt$(r.amount)}</td><td>${r.active?'✅ On':'⏸ Paused'}</td>
-  <td style="white-space:nowrap">${r.docId?`<button class="iconbtn" title="View attached photo" onclick="viewDoc('${r.docId}')">📎</button> `:''}<button class="iconbtn" onclick="toggleRecurring('${r.id}')">${r.active?'⏸':'▶️'}</button><button class="iconbtn" onclick="delRecurring('${r.id}')">🗑</button></td></tr>`).join('')}
+  <td style="white-space:nowrap"><button class="iconbtn" title="Edit this rule" onclick="openRecurring('${r.id}')">✏️</button> ${r.docId?`<button class="iconbtn" title="View attached photo" onclick="viewDoc('${r.docId}')">📎</button> `:''}<button class="iconbtn" onclick="toggleRecurring('${r.id}')">${r.active?'⏸':'▶️'}</button><button class="iconbtn" onclick="delRecurring('${r.id}')">🗑</button></td></tr>`).join('')}
   </table></div>`:'<p class="empty">No recurring entries yet.</p>'}</div>`;
 }
-function openRecurring(){
-  openModal(`<h3>🔁 New Recurring Entry</h3><form id="recForm">
-    <div class="frow"><div class="fld" style="flex:2"><label>Description</label><input id="rDesc" required placeholder="e.g. LTD weekly fee"></div>
-    <div class="fld"><label>Amount ($)</label><input id="rAmt" type="number" step="0.01" min="0" required placeholder="0.00"></div></div>
-    <div class="frow"><div class="fld"><label>Type</label><select id="rType"><option value="expense">🧾 Expense</option><option value="income">💰 Income</option></select></div>
+function openRecurring(id){
+  const r=id?DB.recurring.find(x=>x.id===id):null;
+  openModal(`<h3>${r?'✏️ Edit Recurring Entry':'🔁 New Recurring Entry'}</h3><form id="recForm">
+    <div class="frow"><div class="fld" style="flex:2"><label>Description</label><input id="rDesc" required placeholder="e.g. LTD weekly fee" value="${r?esc(r.desc):''}"></div>
+    <div class="fld"><label>Amount ($)</label><input id="rAmt" type="number" step="0.01" min="0" required placeholder="0.00" value="${r?r.amount:''}"></div></div>
+    <div class="frow"><div class="fld"><label>Type</label><select id="rType"><option value="expense" ${r&&r.type==='expense'?'selected':''}>🧾 Expense</option><option value="income" ${r&&r.type==='income'?'selected':''}>💰 Income</option></select></div>
     <div class="fld"><label>Category</label><select id="rCat">${CATS.map(c=>`<option value="${c[0]}">${c[1]}</option>`).join('')}</select></div>
-    <div class="fld"><label>Business</label><select id="rBiz">${BIZ.map(b=>`<option value="${b.id}">${b.e} ${b.n}</option>`).join('')}</select></div></div>
-    <div class="frow"><div class="fld"><label>Frequency</label><select id="rFreq">${FREQS.map(f=>`<option value="${f[0]}">${f[1]}</option>`).join('')}</select></div>
-    <div class="fld"><label>First / Next Date</label><input type="date" id="rNext" required value="${todayStr()}"></div>
-    <div class="fld"><label>Method</label><select id="rMethod">${METHODS.map(m=>`<option>${m}</option>`).join('')}</select></div></div>
-    ${photoBoxHTML(null,'Snap the bill, statement, or screenshot behind this rule — it saves to the Vault, and entries this rule creates carry the same photo.')}
-    <div style="display:flex;gap:10px;justify-content:flex-end"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn">💾 Save Rule</button></div>
+    <div class="fld"><label>Business</label><select id="rBiz">${BIZ.map(b=>`<option value="${b.id}" ${r&&r.biz===b.id?'selected':''}>${b.e} ${b.n}</option>`).join('')}</select></div></div>
+    <div class="frow"><div class="fld"><label>Frequency</label><select id="rFreq">${FREQS.map(f=>`<option value="${f[0]}" ${r&&r.freq===f[0]?'selected':''}>${f[1]}</option>`).join('')}</select></div>
+    <div class="fld"><label>${r?'Next Date':'First / Next Date'}</label><input type="date" id="rNext" required value="${r?r.nextDate:todayStr()}"></div>
+    <div class="fld"><label>Method</label><select id="rMethod">${METHODS.map(m=>`<option ${r&&r.method===m?'selected':''}>${m}</option>`).join('')}</select></div></div>
+    ${photoBoxHTML(r?r.docId:null,'Snap the bill, statement, or screenshot behind this rule — it saves to the Vault, and entries this rule creates carry the same photo.')}
+    ${r?'<p class="hint">Editing a rule changes future entries it creates — entries already logged keep what they had. Change the Next Date to control when it fires next.</p>':''}
+    <div style="display:flex;gap:10px;justify-content:flex-end"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn">${r?'💾 Save Changes':'💾 Save Rule'}</button></div>
   </form>`);
   wirePhotoBox();
   const syncCats=()=>{$('#rCat').innerHTML=CATS.filter(c=>c[2]===$('#rType').value).map(c=>`<option value="${c[0]}">${c[1]}</option>`).join('')};
   $('#rType').addEventListener('change',syncCats);syncCats();
+  if(r)$('#rCat').value=r.cat;
   $('#recForm').addEventListener('submit',async e=>{e.preventDefault();
-    const rid=uid();
     const docId=await persistStagedPhoto();
     if(stagedPhoto&&!docId)toast('⚠️ Photo could not be stored on this device — rule still saved');
-    const rule={id:rid,desc:$('#rDesc').value.trim(),amount:Math.abs(parseFloat($('#rAmt').value)||0),type:$('#rType').value,cat:$('#rCat').value,biz:$('#rBiz').value,method:$('#rMethod').value,freq:$('#rFreq').value,nextDate:$('#rNext').value,active:true,owner:ownerForBiz($('#rBiz').value)};
-    if(docId){rule.docId=docId;registerPhotoDoc(docId,{name:'Recurring — '+rule.desc,type:'Other',biz:rule.biz,year:curYear,linkId:rid})}
+    const data={desc:$('#rDesc').value.trim(),amount:Math.abs(parseFloat($('#rAmt').value)||0),type:$('#rType').value,cat:$('#rCat').value,biz:$('#rBiz').value,method:$('#rMethod').value,freq:$('#rFreq').value,nextDate:$('#rNext').value,owner:ownerForBiz($('#rBiz').value)};
+    if(docId)data.docId=docId;
+    if(r){Object.assign(r,data);if(docId)registerPhotoDoc(docId,{name:'Recurring — '+data.desc,type:'Other',biz:data.biz,year:curYear,linkId:r.id})}
+    else{const rid=uid();DB.recurring.push({id:rid,...data,active:true});if(docId)registerPhotoDoc(docId,{name:'Recurring — '+data.desc,type:'Other',biz:data.biz,year:curYear,linkId:rid})}
     stagedPhoto=null;
-    DB.recurring.push(rule);
-    saveDB();closeModal();const n=runRecurring();toast(n?'🔁 Rule saved — '+n+' due entries logged!':'🔁 Rule saved!');renderSettings();});
+    saveDB();closeModal();const n=runRecurring();toast(r?'✏️ Rule updated!':(n?'🔁 Rule saved — '+n+' due entries logged!':'🔁 Rule saved!'));renderSettings();});
 }
 function toggleRecurring(id){const r=DB.recurring.find(x=>x.id===id);if(r)r.active=!r.active;saveDB();renderSettings()}
 function delRecurring(id){DB.recurring=DB.recurring.filter(x=>x.id!==id);saveDB();toast('🗑 Rule removed (past entries stay)');renderSettings()}
