@@ -501,6 +501,18 @@ function txnForm(t,type,group){
   const cats=CATS.filter(c=>c[2]===(t?t.type:type));
   return `<h3>${t?'✏️ Edit':'➕ Add'} Transaction</h3>
   <form id="txnForm">
+    <div id="scanBox" style="background:var(--panel2);border:1px dashed var(--line);border-radius:12px;padding:12px;margin-bottom:14px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <button type="button" class="btn small" id="scanBtnCam">📷 Scan receipt</button>
+        <button type="button" class="btn ghost small" id="scanBtnGal">🖼️ Pick from gallery</button>
+        <span style="font-size:12.5px;color:var(--mut)">Snap a receipt — N8Books reads it and pre-fills the form. You review &amp; save — nothing is ever auto-logged.</span>
+      </div>
+      <input type="file" id="receiptFileCam" accept="image/*" capture="environment" hidden>
+      <input type="file" id="receiptFileGal" accept="image/*" hidden>
+      <div id="scanStatus" style="font-size:13.5px;margin-top:8px;min-height:18px"></div>
+      <div id="receiptPreview" style="margin-top:6px"></div>
+      ${t&&t.docId?`<div style="display:flex;gap:10px;align-items:center;margin-top:8px"><img data-docimg="${t.docId}" alt="attached receipt" style="width:64px;height:64px;object-fit:cover;border-radius:8px;background:var(--panel)"><span style="font-size:13.5px">📎 Receipt attached</span><button type="button" class="btn ghost small" onclick="viewDoc('${t.docId}')">👁 View receipt</button><span style="font-size:12.5px;color:var(--mut)">Scanning a new one replaces the link (old photo stays in the Vault).</span></div>`:''}
+    </div>
     <div class="frow"><div class="fld" style="flex:2"><label>Type</label>
       <div class="seg"><button type="button" id="segInc" class="${(t?t.type:type)==='income'?'on inc':''}">💰 Income</button><button type="button" id="segExp" class="${(t?t.type:type)==='expense'?'on exp':''}">🧾 Expense</button></div></div>
     <div class="fld"><label>Date</label><input type="date" id="fDate" required value="${t?t.date:todayStr()}"></div></div>
@@ -531,6 +543,14 @@ let formType='expense';
 function openAdd(type){formType=type||'expense';openModal(txnForm(null,formType));wireTxnForm(null)}
 function openEdit(id){const t=DB.txns.find(x=>x.id===id);if(!t)return;formType=t.type;const group=t.splitId?DB.txns.filter(x=>x.splitId===t.splitId):null;openModal(txnForm(t,null,group));wireTxnForm(t,group)}
 function wireTxnForm(t,group){
+  stagedReceipt=null;
+  const _cam=$('#receiptFileCam'),_gal=$('#receiptFileGal');
+  if($('#scanBtnCam'))$('#scanBtnCam').onclick=()=>_cam&&_cam.click();
+  if($('#scanBtnGal'))$('#scanBtnGal').onclick=()=>_gal&&_gal.click();
+  const _onPick=e=>{const f=e.target.files&&e.target.files[0];e.target.value='';if(f)handleReceiptFile(f)};
+  if(_cam)_cam.addEventListener('change',_onPick);
+  if(_gal)_gal.addEventListener('change',_onPick);
+  if(t&&t.docId)hydrateDocImages();
   const segI=$('#segInc'),segE=$('#segExp');
   const setType=ty=>{formType=ty;segI.className=ty==='income'?'on inc':'';segE.className=ty==='expense'?'on exp':'';
     $('#fCat').innerHTML=CATS.filter(c=>c[2]===ty).map(c=>`<option value="${c[0]}">${c[1]}</option>`).join('')};
@@ -547,23 +567,40 @@ function wireTxnForm(t,group){
     $$('#splitRows .sAmt').forEach(i=>i.addEventListener('input',updSplitSum));
     updSplitSum();
   }
-  $('#txnForm').addEventListener('submit',e=>{
+  $('#txnForm').addEventListener('submit',async e=>{
     e.preventDefault();
     const amt=Math.abs(parseFloat($('#fAmt').value)||0);if(!amt){toast('Enter an amount');return}
     const base={date:$('#fDate').value,desc:$('#fDesc').value.trim(),type:formType,method:$('#fMethod').value};
+    /* receipt scan: persist the staged photo to the Document Vault (after validation, never blocks the save) */
+    let newDocId=null;
+    const persistReceipt=async()=>{
+      if(!stagedReceipt)return;
+      const st=$('#scanStatus');if(st)st.textContent='💾 Saving receipt photo to the Vault…';
+      newDocId=await vaultPutReceipt();
+      if(!newDocId)toast('⚠️ Receipt photo could not be stored on this device — transaction still saved');
+    };
     if(splitChk&&splitChk.checked){
       const rows=$$('#splitRows .splitrow').map(r=>({amount:Math.abs(parseFloat(r.querySelector('.sAmt').value)||0),cat:r.querySelector('.sCat').value,biz:r.querySelector('.sBiz').value,owner:r.querySelector('.sOwner').value,note:r.querySelector('.sNote').value.trim()})).filter(r=>r.amount>0);
       const sum=rows.reduce((a,r)=>a+r.amount,0);
       if(rows.length<2){toast('✂️ A split needs at least 2 lines');return}
       if(Math.abs(sum-amt)>0.011){toast('✂️ Split lines add to '+fmt$(sum)+' but the total is '+fmt$(amt)+' — make them match');return}
+      await persistReceipt();
       const sid=(group&&group.length)?group[0].splitId:uid();
       if(group&&group.length)DB.txns=DB.txns.filter(x=>x.splitId!==sid);
       else if(t)DB.txns=DB.txns.filter(x=>x.id!==t.id);
-      rows.forEach(r=>{const nt={id:uid(),...base,amount:r.amount,cat:r.cat,biz:r.biz,owner:r.owner,note:r.note||$('#fNote').value.trim(),src:'manual',splitId:sid};nt.sig=txnSig(nt);DB.txns.push(nt)});
+      let firstId='';
+      rows.forEach(r=>{const nt={id:uid(),...base,amount:r.amount,cat:r.cat,biz:r.biz,owner:r.owner,note:r.note||$('#fNote').value.trim(),src:stagedReceipt?'scan':'manual',splitId:sid};if(newDocId)nt.docId=newDocId;nt.sig=txnSig(nt);DB.txns.push(nt);if(!firstId)firstId=nt.id});
+      if(newDocId)registerReceiptDoc(newDocId,firstId,base.desc,rows[0].biz,base.date);
+      stagedReceipt=null;
       saveDB();fillYears();closeModal();toast('✂️ Split saved — '+rows.length+' lines!');render(currentPage());return;
     }
+    await persistReceipt();
     const data={...base,amount:amt,cat:$('#fCat').value,biz:$('#fBiz').value,note:$('#fNote').value.trim(),owner:$('#fOwner').value};
-    if(t){Object.assign(t,data);t.sig=txnSig(t)}else{const nt={id:uid(),...data,src:'manual'};nt.sig=txnSig(nt);DB.txns.push(nt)}
+    if(newDocId)data.docId=newDocId;
+    let savedId='';
+    if(t){Object.assign(t,data);t.sig=txnSig(t);savedId=t.id}else{const nt={id:uid(),...data,src:stagedReceipt?'scan':'manual'};nt.sig=txnSig(nt);DB.txns.push(nt);savedId=nt.id}
+    if(newDocId)registerReceiptDoc(newDocId,savedId,data.desc,data.biz,data.date);
+    stagedReceipt=null;
     saveDB();fillYears();closeModal();toast(t?'💾 Saved!':'✅ Added!');render(currentPage());
   });
 }
@@ -594,7 +631,7 @@ function renderTxns(){
       ${page.map(t=>`<tr><td style="white-space:nowrap">${t.date}</td><td>${esc(t.desc)}${t.note?`<div style="color:var(--mut);font-size:12px">${esc(t.note)}</div>`:''}</td>
       <td><span class="chip">${catName(t.cat)}</span>${t.splitId?' <span class="chip" title="Part of a split transaction">✂️ split</span>':''}</td><td><span class="chip ${(BIZ.find(b=>b.id===t.biz)||{}).cls||''}">${bizName(t.biz)}</span> <span class="chip">${ownerName(t.owner)}</span></td>
       <td>${esc(t.method||'')}</td><td class="amt ${t.type==='income'?'pos':'neg'}">${t.type==='income'?'+':'-'}${fmt$(t.amount)}</td>
-      <td><button class="iconbtn" onclick="openEdit('${t.id}')">✏️</button></td></tr>`).join('')}
+      <td style="white-space:nowrap">${t.docId?`<button class="iconbtn" title="View attached receipt" onclick="viewDoc('${t.docId}')">📎</button> `:''}<button class="iconbtn" onclick="openEdit('${t.id}')">✏️</button></td></tr>`).join('')}
     </table></div>
     <div class="pager"><button class="btn ghost small" ${txFilter.page===0?'disabled':''} onclick="txPage(-1)">← Prev</button> Page ${txFilter.page+1} of ${pages} <button class="btn ghost small" ${txFilter.page>=pages-1?'disabled':''} onclick="txPage(1)">Next →</button></div>`
     :'<p class="empty">No transactions match. Try clearing filters — or import a bank file to fill this up. 📥</p>'}
@@ -1214,6 +1251,7 @@ function renderTaxHQ(){
       <div class="panel" style="margin:0"><h2 style="font-size:16px">${d.type==='Receipt'?'🧾':d.type.startsWith('1099')?'📑':d.type==='W-2'?'🏭':'📄'} ${esc(d.name)}</h2>
       <div class="kv"><span>Type</span><b>${esc(d.type)}</b></div>
       <div class="kv"><span>Business</span><b>${bizName(d.biz)}</b></div>
+      ${d.txnId?`<div class="kv"><span>Linked</span><b>📎 Attached to a transaction</b></div>`:''}
       ${d.mime.startsWith('image')?`<img data-docimg="${d.id}" alt="document" style="width:100%;border-radius:10px;margin-top:8px;max-height:180px;object-fit:cover;background:var(--panel2)">`:''}
       <div style="display:flex;gap:8px;margin-top:10px">
         <button class="btn small" onclick="viewDoc('${d.id}')">👁 View</button>
@@ -1467,6 +1505,152 @@ renderSettings=function(){_renderSettingsV2();$('#page-settings').insertAdjacent
   idbGet('kv','saveDir').then(h=>{if(h){saveDirHandle=h;const el=$('#saveDirName');if(el)el.textContent=h.name}else{const el=$('#saveDirName');if(el)el.textContent='none yet'}}).catch(()=>{});
   if(navigator.storage&&navigator.storage.estimate)navigator.storage.estimate().then(e=>{const el=$('#storageEst');if(el)el.textContent=(e.usage?(e.usage/1048576).toFixed(1)+' MB':'?')+' of ~'+(e.quota?Math.round(e.quota/1073741824*10)/10+' GB':'?')+' available (IndexedDB + local)'});
 };
+</script>
+<script>
+'use strict';
+/* ================= RECEIPT SCAN-TO-ENTRY (OCR) =================
+   Snap a receipt in the Add/Edit form -> Tesseract.js reads it in-browser ->
+   vendor/date/total are parsed + autoCat pre-picks business & category ->
+   the normal form lands PRE-FILLED for review. NEVER auto-saves:
+   Nathan's standing rule is nothing gets auto-logged — he confirms everything.
+   The photo itself is compressed (same WebP path as the Document Vault:
+   max dim 1100, q0.82) and, on Save, stored in IndexedDB + linked to the
+   transaction via txn.docId and a Vault entry (type Receipt, txnId set).
+   Offline note: the first scan downloads the OCR engine + English data
+   (~12MB) from the jsDelivr CDN, so it needs internet once; the service
+   worker runtime-caches those assets so later scans can work offline. */
+let stagedReceipt=null; /* {dataUrl,mime,name,sizeKB} awaiting Save */
+let scannedText='';
+function compressImageFile(file){
+  return new Promise((res,rej)=>{
+    const img=new Image();
+    img.onload=()=>{
+      try{
+        const scale=Math.min(1,1100/Math.max(img.width,img.height));
+        const cv=document.createElement('canvas');cv.width=Math.max(1,Math.round(img.width*scale));cv.height=Math.max(1,Math.round(img.height*scale));
+        cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
+        let du=cv.toDataURL('image/webp',0.82);const isW=du.startsWith('data:image/webp');
+        if(!isW)du=cv.toDataURL('image/jpeg',0.8);
+        URL.revokeObjectURL(img.src);
+        res({dataUrl:du,mime:isW?'image/webp':'image/jpeg',name:file.name||'receipt.jpg',sizeKB:Math.round(du.length*0.75/1024)});
+      }catch(e){rej(e)}
+    };
+    img.onerror=()=>rej(new Error('image decode failed'));
+    img.src=URL.createObjectURL(file);
+  });
+}
+let _tessLoading=null;
+function loadTesseract(){
+  if(window.Tesseract)return Promise.resolve(window.Tesseract);
+  if(_tessLoading)return _tessLoading;
+  _tessLoading=new Promise((res,rej)=>{
+    const s=document.createElement('script');
+    s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+    s.onload=()=>{if(window.Tesseract)res(window.Tesseract);else{_tessLoading=null;rej(new Error('OCR reader failed to load'))}};
+    s.onerror=()=>{_tessLoading=null;rej(new Error('OCR download failed — are you offline?'))};
+    document.head.appendChild(s);
+  });
+  return _tessLoading;
+}
+async function runReceiptOCR(dataUrl,onProg){
+  const T=await loadTesseract();
+  const r=await T.recognize(dataUrl,'eng',{logger:m=>{if(onProg&&m.status==='recognizing text')onProg(Math.round((m.progress||0)*100))}});
+  return (r&&r.data&&r.data.text)||'';
+}
+function parseReceiptText(text){
+  const raw=String(text||'');
+  const lines=raw.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+  /* ---- vendor: first plausible store-name line near the top ---- */
+  let vendor='';
+  const skip=/^(receipt|invoice|order|ticket|welcome|thank|customer|merchant|duplicate|copy|tel\b|phone|fax|www\.|https?|cashier|register|trans\b|ref\b|auth\b|sale\b)/i;
+  const phoneRe=/\d{3}[-.)]\s?\d{3}[-.\s]\d{4}/;
+  const zipRe=/\b\d{5}(-\d{4})?\b/;
+  const streetRe=/\b\d+\s+[A-Za-z]+\s+(st|ave|rd|blvd|dr|hwy|road|street|avenue|lane|ln|court|ct)\b/i;
+  for(let i=0;i<Math.min(lines.length,6);i++){
+    const L=lines[i];
+    const letters=(L.match(/[A-Za-z]/g)||[]).length;
+    if(letters<3)continue;
+    if(skip.test(L))continue;
+    if(phoneRe.test(L)&&letters<12)continue;
+    if(streetRe.test(L))continue;
+    if(zipRe.test(L)&&letters<12)continue;
+    vendor=L.replace(/\s{2,}/g,' ').replace(/\s+#\s*\d+.*$/,'').replace(/[*_~|]+/g,'').replace(/[^A-Za-z0-9&'.\- ]+$/,'').trim();
+    if(vendor)break;
+  }
+  if(vendor.length>48)vendor=vendor.slice(0,48).trim();
+  /* ---- date: first valid date anywhere on the receipt ---- */
+  let date='';
+  const MONTHS={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+  const iso=(y,m,d)=>{y=+y;m=+m;d=+d;if(m<1||m>12||d<1||d>31)return'';if(y<100)y+=2000;if(y<2015||y>2035)return'';return y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0')};
+  let mm;
+  if((mm=raw.match(/\b(20\d{2})\s*[-/]\s*(\d{1,2})\s*[-/]\s*(\d{1,2})\b/)))date=iso(mm[1],mm[2],mm[3]);
+  if(!date&&(mm=raw.match(/\b(\d{1,2})\s*[-/]\s*(\d{1,2})\s*[-/]\s*(20\d{2}|\d{2})\b/)))date=iso(mm[3],mm[1],mm[2]);
+  if(!date&&(mm=raw.match(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(\d{1,2}),?\s+(20\d{2})\b/i)))date=iso(mm[3],MONTHS[mm[1].slice(0,3).toLowerCase()],mm[2]);
+  if(!date&&(mm=raw.match(/\b(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s*,?\s+(20\d{2})\b/i)))date=iso(mm[3],MONTHS[mm[2].slice(0,3).toLowerCase()],mm[1]);
+  /* ---- total: TOTAL line wins; never subtotal/tax when a total exists ---- */
+  const amountsIn=s=>{const out=[];const re=/\$?\s*(\d{1,3}(?:,\d{3})+|\d+)\.(\d{2})\b/g;let x;while((x=re.exec(s))!==null){const v=parseFloat((x[1]+'.'+x[2]).replace(/,/g,''));if(v>0&&v<100000)out.push(v)}return out};
+  let total=null;
+  const totalAmts=[];
+  lines.forEach((L,i)=>{
+    if(/sub\s*-?\s*total/i.test(L))return;
+    if(/savings|you saved/i.test(L))return;
+    if(/\b(grand\s*total|total\s*due|amount\s*due|balance\s*due|total)\b/i.test(L)){
+      let a=amountsIn(L);
+      if(!a.length&&lines[i+1]&&amountsIn(lines[i+1]).length&&lines[i+1].replace(/[\d$.,\s]/g,'').length<=2)a=amountsIn(lines[i+1]);
+      totalAmts.push(...a);
+    }
+  });
+  if(totalAmts.length)total=Math.max(...totalAmts);
+  if(total===null){ /* fallback: largest amount on the receipt (ignoring change/tendered lines) */
+    let all=[];
+    lines.forEach(L=>{if(/change|tendered|you saved|savings/i.test(L))return;all.push(...amountsIn(L))});
+    if(all.length)total=Math.max(...all);
+  }
+  return {vendor,date,total};
+}
+function applyScanToForm(p){
+  const found=[];
+  if(p.vendor){const dEl=$('#fDesc');if(dEl)dEl.value=p.vendor;found.push('store: '+p.vendor)}
+  if(p.date){const dt=$('#fDate');if(dt)dt.value=p.date;found.push('date '+p.date)}
+  if(p.total!=null){const aEl=$('#fAmt');if(aEl)aEl.value=p.total.toFixed(2);found.push(fmt$(p.total))}
+  if(p.vendor){
+    if(formType!=='expense'){const se=$('#segExp');if(se)se.click()} /* receipts are expenses; also rebuilds the category list */
+    const a=autoCat(p.vendor,-1);
+    if(a.biz){const b=$('#fBiz');if(b)b.value=a.biz;const o=$('#fOwner');if(o)o.value=ownerForBiz(a.biz)}
+    const c=$('#fCat');if(c&&[...c.options].some(o=>o.value===a.cat))c.value=a.cat;
+    if(a.biz)found.push('→ '+bizName(a.biz)+' / '+catName(a.cat));
+  }
+  return found;
+}
+async function handleReceiptFile(file){
+  const st=$('#scanStatus'),pv=$('#receiptPreview');
+  if(!file||!file.type||!file.type.startsWith('image/')){if(st)st.innerHTML='⚠️ That file is not a photo — pick a receipt image.';return}
+  if(st)st.textContent='🗜️ Compressing photo…';
+  try{stagedReceipt=await compressImageFile(file)}catch(e){if(st)st.innerHTML='⚠️ Could not read that photo file. Try again — or fill the form in by hand.';return}
+  if(pv)pv.innerHTML='<img src="'+stagedReceipt.dataUrl+'" alt="receipt preview" style="max-height:140px;border-radius:10px;border:1px solid var(--line)"><div style="font-size:12.5px;color:var(--mut);margin-top:4px">📎 This photo will attach to the transaction when you save.</div>';
+  if(st)st.textContent='🔎 Reading receipt… (the first scan downloads the OCR reader — needs internet once)';
+  try{
+    const text=await runReceiptOCR(stagedReceipt.dataUrl,pct=>{if(st)st.textContent='🔎 Reading receipt… '+pct+'%'});
+    scannedText=text;
+    const p=parseReceiptText(text);
+    if(!p.vendor&&!p.date&&p.total==null)throw new Error('nothing parsed');
+    const found=applyScanToForm(p);
+    if(st)st.innerHTML='✅ Scanned — found '+esc(found.join(' · '))+'. <b>Check everything, then tap Save</b> — nothing is logged until you do.';
+    toast('📷 Receipt scanned — review & save');
+  }catch(e){
+    if(st)st.innerHTML='⚠️ Couldn\'t read that photo clearly — no problem: fill the form in by hand below. <b>The photo is still attached</b> and will save with the transaction.';
+  }
+}
+async function vaultPutReceipt(){
+  if(!stagedReceipt)return null;
+  const docId=uid();
+  try{await idbPut('docs',docId,stagedReceipt.dataUrl)}catch(e){return null}
+  return docId;
+}
+function registerReceiptDoc(docId,txnId,desc,biz,date){
+  DB.docs.push({id:docId,name:'Receipt — '+(desc||'transaction'),type:'Receipt',biz:biz||'per',year:yrOf(date||todayStr()),mime:stagedReceipt?stagedReceipt.mime:'image/webp',added:todayStr(),sizeKB:stagedReceipt?stagedReceipt.sizeKB:0,txnId:txnId||''});
+}
+window.__n8booksScan={parseReceiptText,compressImageFile,runReceiptOCR,applyScanToForm,handleReceiptFile,parse:parseReceiptText};
 </script>
 <script>
 'use strict';
