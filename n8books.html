@@ -650,6 +650,28 @@ function txPage(d){txFilter.page+=d;renderTxns()}
 'use strict';
 /* ================= IMPORT ================= */
 let pendingImport=[];
+/* Backup restore is preview-first: show exactly what would replace the
+   current books and wait for an explicit tap — an upload never commits
+   silently. */
+let pendingRestore=null;
+function previewRestore(payload,fname){
+  pendingRestore=payload;
+  const yrs=[...new Set((payload.txns||[]).map(t=>yrOf(t.date)))].sort((a,b)=>a-b);
+  const inc=(payload.txns||[]).filter(t=>t.type==='income').length;
+  openModal(`<h3>👀 Preview Backup Before Restoring</h3>
+  <p style="color:var(--mut);margin-bottom:12px">File: <b style="color:var(--txt)">${esc(fname||'backup.json')}</b>. Restoring <b>replaces</b> the books on this device with what's below. Nothing has changed yet.</p>
+  <div class="kv"><span>Transactions in backup</span><b>${(payload.txns||[]).length} (${inc} income · ${(payload.txns||[]).length-inc} expenses)</b></div>
+  <div class="kv"><span>Mileage entries</span><b>${(payload.mileage||[]).length}</b></div>
+  <div class="kv"><span>Years covered</span><b>${yrs.join(', ')||'—'}</b></div>
+  <div class="kv"><span>Currently on this device</span><b>${DB.txns.length} transactions · ${DB.mileage.length} mileage</b></div>
+  <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap"><button class="btn ghost" onclick="pendingRestore=null;closeModal()">Cancel — keep my current books</button><button class="btn" onclick="applyRestore()">💾 Restore — replace my books</button></div>`);
+}
+function applyRestore(){
+  if(!pendingRestore)return;
+  DB.txns=pendingRestore.txns;DB.mileage=pendingRestore.mileage||DB.mileage;
+  pendingRestore=null;
+  saveDB();fillYears();closeModal();toast('💾 Backup restored!');go('dash');
+}
 function renderImport(){
   $('#page-import').innerHTML=`
   <div class="panel reveal in"><h2>📥 Import Transactions</h2>
@@ -678,7 +700,8 @@ function readFile(f){
     try{
       if(f.name.toLowerCase().endsWith('.json')){
         const data=JSON.parse(r.result);
-        if(data.txns){DB.txns=data.txns;DB.mileage=data.mileage||DB.mileage;saveDB();fillYears();toast('💾 Backup restored!');go('dash');return}
+        const payload=(data&&data.txns)?data:(data&&data.data&&data.data.txns)?data.data:null;
+        if(payload){previewRestore(payload,f.name);return}
         throw new Error('Not an N8Books backup');
       }
       window._importName=f.name;window._importPreset=($('#impPreset')||{}).value||'auto';
@@ -788,7 +811,7 @@ function renderMileage(){
     <button class="btn" onclick="openMileage()">➕ Log a Trip</button>
     ${ms.length?`<div class="twrap" style="margin-top:14px"><table><tr><th>Date</th><th>Purpose / Route</th><th>Business</th><th style="text-align:right">Miles</th><th style="text-align:right">Value</th><th></th></tr>
     ${ms.map(m=>`<tr><td>${m.date}</td><td>${esc(m.purpose)}</td><td>${bizName(m.biz)}</td><td class="amt">${m.miles}</td><td class="amt gold">${fmt$(m.miles*(MILEAGE_RATES[yrOf(m.date)]||0.7))}</td>
-    <td><button class="iconbtn" onclick="delMile('${m.id}')">🗑</button></td></tr>`).join('')}</table></div>`:'<p class="empty">No trips logged for '+curYear+' yet.</p>'}
+    <td style="white-space:nowrap">${m.docId?`<button class="iconbtn" title="View attached photo" onclick="viewDoc('${m.docId}')">📎</button> `:''}<button class="iconbtn" onclick="delMile('${m.id}')">🗑</button></td></tr>`).join('')}</table></div>`:'<p class="empty">No trips logged for '+curYear+' yet.</p>'}
   </div>`;
   watchReveals();
 }
@@ -798,10 +821,18 @@ function openMileage(){
     <div class="fld"><label>Miles</label><input type="number" id="mMiles" step="0.1" min="0" required placeholder="e.g. 42"></div></div>
     <div class="frow"><div class="fld" style="flex:2"><label>Purpose / Route</label><input id="mPurpose" required placeholder="e.g. Home → Home Depot → tile job (Erika)"></div>
     <div class="fld"><label>Business</label><select id="mBiz">${BIZ.map(b=>`<option value="${b.id}">${b.e} ${b.n}</option>`).join('')}</select></div></div>
+    ${photoBoxHTML(null,'Snap the odometer, a gas receipt, the job site — it saves to the Vault with this trip.')}
     <div style="display:flex;gap:10px;justify-content:flex-end"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn">💾 Save Trip</button></div>
   </form>`);
-  $('#mileForm').addEventListener('submit',e=>{e.preventDefault();
-    DB.mileage.push({id:uid(),date:$('#mDate').value,miles:parseFloat($('#mMiles').value)||0,purpose:$('#mPurpose').value.trim(),biz:$('#mBiz').value});
+  wirePhotoBox();
+  $('#mileForm').addEventListener('submit',async e=>{e.preventDefault();
+    const mid=uid();
+    const docId=await persistStagedPhoto();
+    if(stagedPhoto&&!docId)toast('⚠️ Photo could not be stored on this device — trip still saved');
+    const entry={id:mid,date:$('#mDate').value,miles:parseFloat($('#mMiles').value)||0,purpose:$('#mPurpose').value.trim(),biz:$('#mBiz').value};
+    if(docId){entry.docId=docId;registerPhotoDoc(docId,{name:'Trip photo — '+entry.purpose,type:'Receipt',biz:entry.biz,year:yrOf(entry.date),linkId:mid})}
+    stagedPhoto=null;
+    DB.mileage.push(entry);
     saveDB();fillYears();closeModal();toast('🚗 Trip logged!');render(currentPage())});
 }
 function delMile(id){DB.mileage=DB.mileage.filter(m=>m.id!==id);saveDB();toast('🗑 Deleted');renderMileage()}
@@ -1081,6 +1112,7 @@ function renderPeople(){
       ${p.note?`<p class="hint" style="margin-top:8px">📝 ${esc(p.note)}</p>`:''}
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
         <button class="btn small" onclick="logForPerson('${p.id}')">➕ Log Payment / Purchase</button>
+        ${p.docId?`<button class="btn ghost small" onclick="viewDoc('${p.docId}')">📎 Photo</button>`:''}
         <button class="btn ghost small" onclick="openPerson('${p.id}')">✏️ Edit</button>
         <button class="btn ghost small" onclick="delPerson('${p.id}')">🗑 Remove</button>
       </div></div>`;
@@ -1099,11 +1131,18 @@ function openPerson(id){
     <div class="frow"><div class="fld" style="flex:2"><label>Name (must match how it appears in transactions)</label><input id="pName" required placeholder="e.g. Ne'ala Clark" value="${p?esc(p.name):''}"></div>
     <div class="fld"><label>Role</label><select id="pRole">${ROLES.map(r=>`<option value="${r[0]}" ${p&&p.role===r[0]?'selected':''}>${r[1]}</option>`).join('')}</select></div></div>
     <div class="fld"><label>Notes (uniform sizes, rates, anything)</label><input id="pNote" placeholder="e.g. Youth L shirts · $25/hr · W-9 on file" value="${p?esc(p.note||''):''}"></div>
+    ${photoBoxHTML(p?p.docId:null,'Snap a W-9, an ID, or their work — it saves to the Vault with this person.')}
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:10px"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn">💾 Save</button></div>
   </form>`);
-  $('#personForm').addEventListener('submit',e=>{e.preventDefault();
+  wirePhotoBox();
+  $('#personForm').addEventListener('submit',async e=>{e.preventDefault();
     const data={name:$('#pName').value.trim(),role:$('#pRole').value,note:$('#pNote').value.trim()};
-    if(p)Object.assign(p,data);else DB.people.push({id:uid(),...data});
+    const docId=await persistStagedPhoto();
+    if(stagedPhoto&&!docId)toast('⚠️ Photo could not be stored on this device — person still saved');
+    if(docId)data.docId=docId;
+    if(p){Object.assign(p,data);if(docId)registerPhotoDoc(docId,{name:'Person photo — '+data.name,type:'Other',biz:'cfp',year:curYear,linkId:p.id})}
+    else{const pid=uid();DB.people.push({id:pid,...data});if(docId)registerPhotoDoc(docId,{name:'Person photo — '+data.name,type:'Other',biz:'cfp',year:curYear,linkId:pid})}
+    stagedPhoto=null;
     saveDB();closeModal();toast('✅ Saved!');renderPeople()});
 }
 function delPerson(id){DB.people=DB.people.filter(x=>x.id!==id);saveDB();toast('🗑 Removed (their transactions stay in the books)');renderPeople()}
@@ -1141,7 +1180,7 @@ function renderInvoices(){
     ${yr.map(i=>`<tr><td>${esc(i.num)}</td><td>${i.date}</td><td>${esc(i.client)}</td>
       <td><span class="chip" style="${i.status==='Paid'?'border-color:var(--grn);color:var(--grn)':i.status==='Sent'?'border-color:var(--gold);color:var(--gold)':''}">${i.status}</span></td>
       <td class="amt">${fmt$(invTotal(i))}</td>
-      <td style="white-space:nowrap"><button class="iconbtn" title="Edit" onclick="openInvoice('${i.id}')">✏️</button>
+      <td style="white-space:nowrap">${i.docId?`<button class="iconbtn" title="View attached photo" onclick="viewDoc('${i.docId}')">📎</button> `:''}<button class="iconbtn" title="Edit" onclick="openInvoice('${i.id}')">✏️</button>
       ${i.status!=='Paid'?`<button class="iconbtn" title="Mark paid & post income" onclick="markPaid('${i.id}')">💰</button>`:''}
       <button class="iconbtn" title="Download printable invoice" onclick="downloadInvoice('${i.id}')">⬇️</button>
       <button class="iconbtn" title="Delete" onclick="delInvoice('${i.id}')">🗑</button></td></tr>`).join('')}
@@ -1168,14 +1207,21 @@ function openInvoice(id){
     <button type="button" class="btn ghost small" onclick="$('#itemRows').insertAdjacentHTML('beforeend',itemRowHTML())">➕ Add Line</button>
     <div class="kv" style="margin-top:10px"><span><b>Total</b></span><b id="invTotalOut">$0.00</b></div>
     <div class="fld" style="margin-top:8px"><label>Notes on invoice</label><input id="iNote" placeholder="e.g. Thank you! Payment via Zelle or Cash App." value="${inv?esc(inv.note||''):''}"></div>
+    ${photoBoxHTML(inv?inv.docId:null,'Snap the signed estimate, the finished work, a materials receipt — it saves to the Vault with this invoice.')}
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn">💾 Save Invoice</button></div>
   </form>`);
+  wirePhotoBox();
   const calc=()=>{let t=0;$$('#itemRows .itemrow').forEach(r=>{t+=(parseFloat(r.querySelector('.iQty').value)||0)*(parseFloat(r.querySelector('.iRate').value)||0)});$('#invTotalOut').textContent=fmt$(t)};
   window.invCalc=calc;$$('#itemRows input').forEach(i=>i.addEventListener('input',calc));calc();
-  $('#invForm').addEventListener('submit',e=>{e.preventDefault();
+  $('#invForm').addEventListener('submit',async e=>{e.preventDefault();
     const items=$$('#itemRows .itemrow').map(r=>({desc:r.querySelector('.iDesc').value.trim(),qty:parseFloat(r.querySelector('.iQty').value)||0,rate:parseFloat(r.querySelector('.iRate').value)||0})).filter(i=>i.desc||i.rate);
     const data={num:$('#iNum').value.trim(),client:$('#iClient').value.trim(),date:$('#iDate').value,due:$('#iDue').value,status:$('#iStatus').value,items,note:$('#iNote').value.trim()};
-    if(inv)Object.assign(inv,data);else DB.invoices.push({id:uid(),...data});
+    const docId=await persistStagedPhoto();
+    if(stagedPhoto&&!docId)toast('⚠️ Photo could not be stored on this device — invoice still saved');
+    if(docId)data.docId=docId;
+    if(inv){Object.assign(inv,data);if(docId)registerPhotoDoc(docId,{name:'Invoice photo — '+data.num+' '+data.client,type:'Other',biz:'cfp',year:yrOf(data.date),linkId:inv.id})}
+    else{const iid=uid();DB.invoices.push({id:iid,...data});if(docId)registerPhotoDoc(docId,{name:'Invoice photo — '+data.num+' '+data.client,type:'Other',biz:'cfp',year:yrOf(data.date),linkId:iid})}
+    stagedPhoto=null;
     saveDB();closeModal();toast('🧾 Invoice saved!');renderInvoices()});
 }
 function itemRowHTML(){const d=document.createElement('div');d.innerHTML=itemRow(null);const html=d.innerHTML;setTimeout(()=>$$('#itemRows input').forEach(i=>i.addEventListener('input',window.invCalc)),30);return html}
@@ -1240,7 +1286,7 @@ function renderTaxHQ(){
     <div class="cards">${qCards}</div>
     <button class="btn" onclick="openTaxPayment()">➕ Log a Tax Payment</button>
     ${pays.length?`<div class="twrap" style="margin-top:14px"><table><tr><th>Date</th><th>Paid To</th><th>Quarter</th><th style="text-align:right">Amount</th><th></th></tr>
-    ${pays.sort((a,b)=>b.date.localeCompare(a.date)).map(p=>`<tr><td>${p.date}</td><td>${p.to==='IRS'?'🇺🇸 IRS (federal)':'🦀 Maryland'}</td><td>Q${p.quarter}</td><td class="amt">${fmt$(p.amount)}</td><td><button class="iconbtn" onclick="delTaxPayment('${p.id}')">🗑</button></td></tr>`).join('')}</table></div>`:''}
+    ${pays.sort((a,b)=>b.date.localeCompare(a.date)).map(p=>`<tr><td>${p.date}</td><td>${p.to==='IRS'?'🇺🇸 IRS (federal)':'🦀 Maryland'}</td><td>Q${p.quarter}</td><td class="amt">${fmt$(p.amount)}</td><td style="white-space:nowrap">${p.docId?`<button class="iconbtn" title="View attached photo" onclick="viewDoc('${p.docId}')">📎</button> `:''}<button class="iconbtn" onclick="delTaxPayment('${p.id}')">🗑</button></td></tr>`).join('')}</table></div>`:''}
   </div>
   <div class="panel reveal in"><h2>📄 Document Vault — ${curYear}</h2>
     <p class="hint">W-2s, 1099s, receipts, contracts — stored in this browser's <b>IndexedDB</b> (way beyond the old 5MB localStorage cap), tagged by year and business. Photos are compressed to WebP. Note: document files live on this device and don't travel with JSON backups — keep originals of big items in Drive too. Vault holds ${DB.docs.length} documents (${Object.entries(byType).map(([k,v])=>k+': '+v).join(' · ')||'none this year'}).</p>
@@ -1251,7 +1297,7 @@ function renderTaxHQ(){
       <div class="panel" style="margin:0"><h2 style="font-size:16px">${d.type==='Receipt'?'🧾':d.type.startsWith('1099')?'📑':d.type==='W-2'?'🏭':'📄'} ${esc(d.name)}</h2>
       <div class="kv"><span>Type</span><b>${esc(d.type)}</b></div>
       <div class="kv"><span>Business</span><b>${bizName(d.biz)}</b></div>
-      ${d.txnId?`<div class="kv"><span>Linked</span><b>📎 Attached to a transaction</b></div>`:''}
+      ${(d.txnId||d.linkId)?`<div class="kv"><span>Linked</span><b>📎 Attached to an entry</b></div>`:''}
       ${d.mime.startsWith('image')?`<img data-docimg="${d.id}" alt="document" style="width:100%;border-radius:10px;margin-top:8px;max-height:180px;object-fit:cover;background:var(--panel2)">`:''}
       <div style="display:flex;gap:8px;margin-top:10px">
         <button class="btn small" onclick="viewDoc('${d.id}')">👁 View</button>
@@ -1274,10 +1320,18 @@ function openTaxPayment(){
     <div class="fld"><label>Amount ($)</label><input type="number" id="tpAmt" step="0.01" min="0" required placeholder="0.00"></div></div>
     <div class="frow"><div class="fld"><label>Paid To</label><select id="tpTo"><option value="IRS">🇺🇸 IRS (federal)</option><option value="MD">🦀 Maryland</option></select></div>
     <div class="fld"><label>For Quarter</label><select id="tpQ">${[1,2,3,4].map(q=>`<option value="${q}">Q${q} ${curYear}</option>`).join('')}</select></div></div>
+    ${photoBoxHTML(null,'Snap the IRS / Maryland confirmation screen or the cancelled check — it saves to the Vault with this payment.')}
     <div style="display:flex;gap:10px;justify-content:flex-end"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn">💾 Save Payment</button></div>
   </form>`);
-  $('#tpForm').addEventListener('submit',e=>{e.preventDefault();
-    DB.taxPayments.push({id:uid(),date:$('#tpDate').value,amount:parseFloat($('#tpAmt').value)||0,to:$('#tpTo').value,quarter:+$('#tpQ').value,year:curYear});
+  wirePhotoBox();
+  $('#tpForm').addEventListener('submit',async e=>{e.preventDefault();
+    const pid=uid();
+    const docId=await persistStagedPhoto();
+    if(stagedPhoto&&!docId)toast('⚠️ Photo could not be stored on this device — payment still saved');
+    const entry={id:pid,date:$('#tpDate').value,amount:parseFloat($('#tpAmt').value)||0,to:$('#tpTo').value,quarter:+$('#tpQ').value,year:curYear};
+    if(docId){entry.docId=docId;registerPhotoDoc(docId,{name:'Tax payment proof — '+(entry.to==='IRS'?'IRS':'Maryland')+' Q'+entry.quarter+' '+entry.year,type:'Other',biz:'per',year:entry.year,linkId:pid})}
+    stagedPhoto=null;
+    DB.taxPayments.push(entry);
     saveDB();closeModal();toast('💸 Payment logged!');renderTaxHQ()});
 }
 function delTaxPayment(id){DB.taxPayments=DB.taxPayments.filter(p=>p.id!==id);saveDB();renderTaxHQ()}
@@ -1286,12 +1340,18 @@ function stageDoc(file){
   if(file.type==='application/pdf'&&file.size>1024*1024){toast('⚠️ That PDF is over 1MB — keep the original in Drive and store a photo/scan here instead.');return}
   const finish=(dataUrl,mime)=>{
     stagedDoc={dataUrl,mime:mime||file.type,name:file.name};
-    $('#docMeta').innerHTML=`<div class="panel" style="margin-top:14px"><h2>🏷️ Tag "${esc(file.name)}"</h2>
-      <div class="frow"><div class="fld"><label>Document Type</label><select id="dType">${['Receipt','W-2','1099-NEC','1099-MISC','Bank Statement','Contract','Other'].map(t=>`<option>${t}</option>`).join('')}</select></div>
+    const isImg=(mime||'').startsWith('image/'),isPdf=(mime||'')==='application/pdf';
+    const preview=isImg?`<img src="${dataUrl}" alt="document preview" style="width:100%;max-height:340px;object-fit:contain;border-radius:10px;border:1px solid var(--line);background:var(--panel2)">`
+      :isPdf?`<embed src="${dataUrl}" type="application/pdf" style="width:100%;height:340px;border-radius:10px;border:1px solid var(--line);background:var(--panel2)">`
+      :`<p class="hint">No visual preview for this file type — check the name below is the file you meant.</p>`;
+    $('#docMeta').innerHTML=`<div class="panel" style="margin-top:14px"><h2>👀 Preview &amp; Tag — "${esc(file.name)}"</h2>
+      <p class="hint">Nothing is saved yet. Check this is the right file and it's readable, tag it, then save.</p>
+      ${preview}
+      <div class="frow" style="margin-top:12px"><div class="fld"><label>Document Type</label><select id="dType">${['Receipt','W-2','1099-NEC','1099-MISC','Bank Statement','Contract','Other'].map(t=>`<option>${t}</option>`).join('')}</select></div>
       <div class="fld"><label>Business</label><select id="dBiz">${BIZ.map(b=>`<option value="${b.id}">${b.e} ${b.n}</option>`).join('')}</select></div>
       <div class="fld"><label>Tax Year</label><input type="number" id="dYear" value="${curYear}"></div>
       <div class="fld" style="flex:2"><label>Display Name</label><input id="dName" value="${esc(file.name)}"></div></div>
-      <button class="btn" onclick="saveDoc()">💾 Save to Vault</button></div>`;
+      <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn" onclick="saveDoc()">💾 Save to Vault</button><button class="btn ghost" onclick="discardStagedDoc()">✖ Discard — don't save</button></div></div>`;
     $('#docMeta').scrollIntoView({behavior:'smooth'});
   };
   if(file.type.startsWith('image/')){
@@ -1307,6 +1367,7 @@ function stageDoc(file){
     const r=new FileReader();r.onload=()=>finish(r.result);r.readAsDataURL(file);
   }
 }
+function discardStagedDoc(){stagedDoc=null;const el=$('#docMeta');if(el)el.innerHTML='';toast('🗑 Discarded — nothing was saved')}
 async function saveDoc(){
   if(!stagedDoc)return;
   const id=uid();
@@ -1352,7 +1413,9 @@ function runRecurring(){
     if(!r.active)continue;
     let guard=0;
     while(r.nextDate<=today&&guard<260){
-      DB.txns.push({id:uid(),date:r.nextDate,desc:r.desc,amount:r.amount,type:r.type,cat:r.cat,biz:r.biz,method:r.method,note:'(recurring)',src:'recurring',owner:r.owner||ownerForBiz(r.biz)});
+      const nt={id:uid(),date:r.nextDate,desc:r.desc,amount:r.amount,type:r.type,cat:r.cat,biz:r.biz,method:r.method,note:'(recurring)',src:'recurring',owner:r.owner||ownerForBiz(r.biz)};
+      if(r.docId)nt.docId=r.docId;
+      DB.txns.push(nt);
       r.nextDate=advanceDate(r.nextDate,r.freq);added++;guard++;
     }
   }
@@ -1366,7 +1429,7 @@ function recurringPanelHTML(){
   ${DB.recurring.length?`<div class="twrap" style="margin-top:14px"><table><tr><th>Description</th><th>Type</th><th>Category</th><th>Every</th><th>Next Due</th><th style="text-align:right">Amount</th><th>Status</th><th></th></tr>
   ${DB.recurring.map(r=>`<tr><td>${esc(r.desc)}</td><td>${r.type==='income'?'💰 Income':'🧾 Expense'}</td><td>${catName(r.cat)}</td><td>${freqName(r.freq)}</td><td>${r.nextDate}</td>
   <td class="amt ${r.type==='income'?'pos':'neg'}">${fmt$(r.amount)}</td><td>${r.active?'✅ On':'⏸ Paused'}</td>
-  <td style="white-space:nowrap"><button class="iconbtn" onclick="toggleRecurring('${r.id}')">${r.active?'⏸':'▶️'}</button><button class="iconbtn" onclick="delRecurring('${r.id}')">🗑</button></td></tr>`).join('')}
+  <td style="white-space:nowrap">${r.docId?`<button class="iconbtn" title="View attached photo" onclick="viewDoc('${r.docId}')">📎</button> `:''}<button class="iconbtn" onclick="toggleRecurring('${r.id}')">${r.active?'⏸':'▶️'}</button><button class="iconbtn" onclick="delRecurring('${r.id}')">🗑</button></td></tr>`).join('')}
   </table></div>`:'<p class="empty">No recurring entries yet.</p>'}</div>`;
 }
 function openRecurring(){
@@ -1379,12 +1442,20 @@ function openRecurring(){
     <div class="frow"><div class="fld"><label>Frequency</label><select id="rFreq">${FREQS.map(f=>`<option value="${f[0]}">${f[1]}</option>`).join('')}</select></div>
     <div class="fld"><label>First / Next Date</label><input type="date" id="rNext" required value="${todayStr()}"></div>
     <div class="fld"><label>Method</label><select id="rMethod">${METHODS.map(m=>`<option>${m}</option>`).join('')}</select></div></div>
+    ${photoBoxHTML(null,'Snap the bill, statement, or screenshot behind this rule — it saves to the Vault, and entries this rule creates carry the same photo.')}
     <div style="display:flex;gap:10px;justify-content:flex-end"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn">💾 Save Rule</button></div>
   </form>`);
+  wirePhotoBox();
   const syncCats=()=>{$('#rCat').innerHTML=CATS.filter(c=>c[2]===$('#rType').value).map(c=>`<option value="${c[0]}">${c[1]}</option>`).join('')};
   $('#rType').addEventListener('change',syncCats);syncCats();
-  $('#recForm').addEventListener('submit',e=>{e.preventDefault();
-    DB.recurring.push({id:uid(),desc:$('#rDesc').value.trim(),amount:Math.abs(parseFloat($('#rAmt').value)||0),type:$('#rType').value,cat:$('#rCat').value,biz:$('#rBiz').value,method:$('#rMethod').value,freq:$('#rFreq').value,nextDate:$('#rNext').value,active:true,owner:ownerForBiz($('#rBiz').value)});
+  $('#recForm').addEventListener('submit',async e=>{e.preventDefault();
+    const rid=uid();
+    const docId=await persistStagedPhoto();
+    if(stagedPhoto&&!docId)toast('⚠️ Photo could not be stored on this device — rule still saved');
+    const rule={id:rid,desc:$('#rDesc').value.trim(),amount:Math.abs(parseFloat($('#rAmt').value)||0),type:$('#rType').value,cat:$('#rCat').value,biz:$('#rBiz').value,method:$('#rMethod').value,freq:$('#rFreq').value,nextDate:$('#rNext').value,active:true,owner:ownerForBiz($('#rBiz').value)};
+    if(docId){rule.docId=docId;registerPhotoDoc(docId,{name:'Recurring — '+rule.desc,type:'Other',biz:rule.biz,year:curYear,linkId:rid})}
+    stagedPhoto=null;
+    DB.recurring.push(rule);
     saveDB();closeModal();const n=runRecurring();toast(n?'🔁 Rule saved — '+n+' due entries logged!':'🔁 Rule saved!');renderSettings();});
 }
 function toggleRecurring(id){const r=DB.recurring.find(x=>x.id===id);if(r)r.active=!r.active;saveDB();renderSettings()}
@@ -1650,7 +1721,55 @@ async function vaultPutReceipt(){
 function registerReceiptDoc(docId,txnId,desc,biz,date){
   DB.docs.push({id:docId,name:'Receipt — '+(desc||'transaction'),type:'Receipt',biz:biz||'per',year:yrOf(date||todayStr()),mime:stagedReceipt?stagedReceipt.mime:'image/webp',added:todayStr(),sizeKB:stagedReceipt?stagedReceipt.sizeKB:0,txnId:txnId||''});
 }
-window.__n8booksScan={parseReceiptText,compressImageFile,runReceiptOCR,applyScanToForm,handleReceiptFile,parse:parseReceiptText};
+/* ---- generic "📷 Take a pic" attachment for the other entry forms ----
+   Same deal as the receipt scan, minus OCR: the photo is compressed through
+   the identical WebP/IndexedDB Vault path and linked to the entry being
+   created (mileage trip, invoice, tax payment, recurring rule, person).
+   One modal is ever open at a time, so one shared staging slot is enough. */
+let stagedPhoto=null; /* {dataUrl,mime,name,sizeKB} awaiting Save */
+function photoBoxHTML(existingDocId,label){
+  return `<div class="photoBox" style="background:var(--panel2);border:1px dashed var(--line);border-radius:12px;padding:12px;margin:12px 0">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <button type="button" class="btn small phCamBtn">📷 Take a pic</button>
+      <button type="button" class="btn ghost small phGalBtn">🖼️ Pick from gallery</button>
+      <span style="font-size:12.5px;color:var(--mut)">${label||'Attach a photo — it saves to the Document Vault with this entry when you hit Save.'}</span>
+    </div>
+    <input type="file" class="phFileCam" accept="image/*" capture="environment" hidden>
+    <input type="file" class="phFileGal" accept="image/*" hidden>
+    <div class="phStatus" style="font-size:13.5px;margin-top:8px"></div>
+    <div class="phPreview" style="margin-top:6px"></div>
+    ${existingDocId?`<div style="display:flex;gap:10px;align-items:center;margin-top:8px"><img data-docimg="${existingDocId}" alt="attached photo" style="width:64px;height:64px;object-fit:cover;border-radius:8px;background:var(--panel)"><span style="font-size:13.5px">📎 Photo attached</span><button type="button" class="btn ghost small" onclick="viewDoc('${existingDocId}')">👁 View</button><span style="font-size:12.5px;color:var(--mut)">Taking a new pic replaces the link (old photo stays in the Vault).</span></div>`:''}
+  </div>`;
+}
+function wirePhotoBox(){
+  stagedPhoto=null;
+  const box=document.querySelector('#modal .photoBox');if(!box)return;
+  const cam=box.querySelector('.phFileCam'),gal=box.querySelector('.phFileGal');
+  box.querySelector('.phCamBtn').onclick=()=>cam&&cam.click();
+  box.querySelector('.phGalBtn').onclick=()=>gal&&gal.click();
+  const pick=async e=>{
+    const f=e.target.files&&e.target.files[0];e.target.value='';if(!f)return;
+    const st=box.querySelector('.phStatus'),pv=box.querySelector('.phPreview');
+    if(!f.type||!f.type.startsWith('image/')){st.textContent='⚠️ That file is not a photo — pick an image.';return}
+    st.textContent='🗜️ Compressing photo…';
+    try{stagedPhoto=await compressImageFile(f)}catch(err){st.textContent='⚠️ Could not read that photo file — try again, or save without it.';return}
+    pv.innerHTML='<img src="'+stagedPhoto.dataUrl+'" alt="photo preview" style="max-height:140px;border-radius:10px;border:1px solid var(--line)"><div style="font-size:12.5px;color:var(--mut);margin-top:4px">📎 This photo will attach to the entry when you save.</div>';
+    st.textContent='✅ Photo ready — it attaches when you save.';
+  };
+  if(cam)cam.addEventListener('change',pick);
+  if(gal)gal.addEventListener('change',pick);
+  if(box.querySelector('img[data-docimg]'))hydrateDocImages();
+}
+async function persistStagedPhoto(){
+  if(!stagedPhoto)return null;
+  const docId=uid();
+  try{await idbPut('docs',docId,stagedPhoto.dataUrl)}catch(e){return null}
+  return docId;
+}
+function registerPhotoDoc(docId,meta){
+  DB.docs.push({id:docId,name:meta.name||'Photo',type:meta.type||'Receipt',biz:meta.biz||'per',year:meta.year||curYear,mime:stagedPhoto?stagedPhoto.mime:'image/webp',added:todayStr(),sizeKB:stagedPhoto?stagedPhoto.sizeKB:0,txnId:meta.txnId||'',linkId:meta.linkId||''});
+}
+window.__n8booksScan={parseReceiptText,compressImageFile,runReceiptOCR,applyScanToForm,handleReceiptFile,parse:parseReceiptText,photoBoxHTML,wirePhotoBox,persistStagedPhoto,registerPhotoDoc};
 </script>
 <script>
 'use strict';
