@@ -141,6 +141,20 @@ tr:hover td{background:color-mix(in srgb,var(--panel2) 55%,transparent)}
 #modal{background:var(--panel);border:1px solid var(--line);border-radius:20px;max-width:640px;width:100%;max-height:88vh;overflow-y:auto;padding:26px;box-shadow:var(--sh);animation:pop .3s cubic-bezier(.34,1.4,.64,1)}
 @keyframes pop{from{transform:scale(.9);opacity:0}to{transform:scale(1);opacity:1}}
 #modal h3{font-size:20px;margin-bottom:14px}
+.txnActions{position:sticky;bottom:-26px;z-index:6;background:var(--panel);margin:12px -26px -26px;padding:12px 26px 16px;border-top:1px solid var(--line);box-shadow:0 -10px 22px rgba(0,0,0,.28);border-radius:0 0 20px 20px}
+.qcCard{background:var(--panel);border:1px solid var(--acc);border-radius:14px;padding:14px;margin-top:10px}
+.qcHead{display:flex;gap:12px;align-items:center;margin-bottom:6px}
+.qcHead img{width:64px;height:64px;object-fit:cover;border-radius:10px;border:1px solid var(--line);background:var(--panel2)}
+.qcRow{display:flex;justify-content:space-between;gap:14px;padding:8px 2px;border-bottom:1px dashed var(--line);font-size:16.5px}
+.qcRow span{color:var(--mut);font-weight:700}
+.qcRow b{text-align:right}
+.qcSave{width:100%;margin-top:12px;background:linear-gradient(90deg,var(--acc2),var(--acc));color:#fff;border:none;border-radius:12px;padding:14px 18px;font-size:17px;font-weight:800;cursor:pointer;box-shadow:0 4px 14px rgba(90,60,220,.35)}
+.qcSave:active{transform:scale(.98)}
+.qcEdit{width:100%;margin-top:8px;background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:12px;padding:11px 18px;font-size:15px;font-weight:700;cursor:pointer}
+.qcRow.low b{color:var(--gold)}
+.qcFlag{display:inline-block;margin-top:3px;font-size:12.5px;font-weight:800;color:#1a1200;background:var(--gold);border-radius:20px;padding:2px 8px;letter-spacing:.2px;white-space:normal}
+.qcNote{font-size:13.5px;color:var(--gold);font-weight:700;margin-top:10px}
+.fieldFlag{font-size:12.5px;color:var(--gold);font-weight:800;margin-top:4px}
 #toasts{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:300;display:flex;flex-direction:column;gap:8px;align-items:center}
 .toast{background:var(--panel);border:1px solid var(--acc);color:var(--txt);padding:11px 20px;border-radius:30px;font-weight:600;box-shadow:var(--sh);animation:tin .35s cubic-bezier(.34,1.4,.64,1)}
 @keyframes tin{from{transform:translateY(20px);opacity:0}to{transform:none;opacity:1}}
@@ -190,6 +204,7 @@ footer{border-top:1px solid var(--line);background:var(--bg2);padding:44px 22px 
   <h1>Your money, <span class="grad">filed &amp; flawless.</span></h1>
   <p>Upload every transaction. N8Books sorts income, expenses &amp; mileage into tax-ready categories — no subscription, no bookkeeper, no stress.</p>
   <div class="cta">
+    <button class="btn" id="heroScanBtn" onclick="openScanReceipt()">📸 Scan Receipt</button>
     <button class="btn" onclick="openAdd()">➕ Add Transaction</button>
     <button class="btn ghost" onclick="go('import')">📥 Import Bank File</button>
   </div>
@@ -210,6 +225,7 @@ footer{border-top:1px solid var(--line);background:var(--bg2);padding:44px 22px 
 </main>
 
 <div id="fabMenu">
+  <button id="fabScanBtn" onclick="openScanReceipt()">📸 Scan Receipt</button>
   <button onclick="openAdd('income')">💰 Quick Income</button>
   <button onclick="openAdd('expense')">🧾 Quick Expense</button>
   <button onclick="openMileage()">🚗 Log Miles</button>
@@ -511,6 +527,7 @@ function txnForm(t,type,group){
       <input type="file" id="receiptFileGal" accept="image/*" hidden>
       <div id="scanStatus" style="font-size:13.5px;margin-top:8px;min-height:18px"></div>
       <div id="receiptPreview" style="margin-top:6px"></div>
+      <div id="quickConfirm" style="margin-top:6px"></div>
       ${t&&t.docId?`<div style="display:flex;gap:10px;align-items:center;margin-top:8px"><img data-docimg="${t.docId}" alt="attached receipt" style="width:64px;height:64px;object-fit:cover;border-radius:8px;background:var(--panel)"><span style="font-size:13.5px">📎 Receipt attached</span><button type="button" class="btn ghost small" onclick="viewDoc('${t.docId}')">👁 View receipt</button><span style="font-size:12.5px;color:var(--mut)">Scanning a new one replaces the link (old photo stays in the Vault).</span></div>`:''}
     </div>
     <div class="frow"><div class="fld" style="flex:2"><label>Type</label>
@@ -532,7 +549,7 @@ function txnForm(t,type,group){
       </div>
       <p class="hint">e.g. one Home Depot run: paint → CFP Supplies, snacks → Personal, ladder → CFP Tools. Lines must add up to the total amount.</p>
     </div>
-    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">
+    <div class="txnActions" style="display:flex;gap:10px;justify-content:flex-end">
       ${t?`<button type="button" class="btn danger" onclick="delTxn('${t.id}')">🗑 Delete</button>`:''}
       <button type="button" class="btn ghost" onclick="closeModal()">Cancel</button>
       <button class="btn">${t?'💾 Save':'➕ Add'}</button>
@@ -541,6 +558,7 @@ function txnForm(t,type,group){
 }
 let formType='expense';
 function openAdd(type){formType=type||'expense';openModal(txnForm(null,formType));wireTxnForm(null)}
+function openScanReceipt(){const fm=$('#fabMenu');if(fm)fm.classList.remove('open');openAdd('expense');const cam=$('#receiptFileCam');if(cam)cam.click();else if($('#scanBtnCam'))$('#scanBtnCam').click()}
 function openEdit(id){const t=DB.txns.find(x=>x.id===id);if(!t)return;formType=t.type;const group=t.splitId?DB.txns.filter(x=>x.splitId===t.splitId):null;openModal(txnForm(t,null,group));wireTxnForm(t,group)}
 function wireTxnForm(t,group){
   stagedReceipt=null;
@@ -1615,6 +1633,7 @@ renderSettings=function(){_renderSettingsV2();$('#page-settings').insertAdjacent
    worker runtime-caches those assets so later scans can work offline. */
 let stagedReceipt=null; /* {dataUrl,mime,name,sizeKB} awaiting Save */
 let scannedText='';
+let lastScanConfidence=null; /* per-field confidence from the latest scan (rank 4) */
 function compressImageFile(file){
   return new Promise((res,rej)=>{
     const img=new Image();
@@ -1655,7 +1674,7 @@ function parseReceiptText(text){
   const raw=String(text||'');
   const lines=raw.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
   /* ---- vendor: first plausible store-name line near the top ---- */
-  let vendor='';
+  let vendor='';let vendorIdx=-1;let vendorCleaned=false;
   const skip=/^(receipt|invoice|order|ticket|welcome|thank|customer|merchant|duplicate|copy|tel\b|phone|fax|www\.|https?|cashier|register|trans\b|ref\b|auth\b|sale\b)/i;
   const phoneRe=/\d{3}[-.)]\s?\d{3}[-.\s]\d{4}/;
   const zipRe=/\b\d{5}(-\d{4})?\b/;
@@ -1668,19 +1687,20 @@ function parseReceiptText(text){
     if(phoneRe.test(L)&&letters<12)continue;
     if(streetRe.test(L))continue;
     if(zipRe.test(L)&&letters<12)continue;
-    vendor=L.replace(/\s{2,}/g,' ').replace(/\s+#\s*\d+.*$/,'').replace(/[*_~|]+/g,'').replace(/[^A-Za-z0-9&'.\- ]+$/,'').trim();
+    const cleaned=L.replace(/\s{2,}/g,' ').replace(/\s+#\s*\d+.*$/,'').replace(/[*_~|]+/g,'').replace(/[^A-Za-z0-9&'.\- ]+$/,'').trim();
+    vendor=cleaned;vendorIdx=i;vendorCleaned=(cleaned!==L.replace(/\s{2,}/g,' ').trim());
     if(vendor)break;
   }
   if(vendor.length>48)vendor=vendor.slice(0,48).trim();
   /* ---- date: first valid date anywhere on the receipt ---- */
-  let date='';
+  let date='';let dateConf=null;let dateSource='';
   const MONTHS={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
   const iso=(y,m,d)=>{y=+y;m=+m;d=+d;if(m<1||m>12||d<1||d>31)return'';if(y<100)y+=2000;if(y<2015||y>2035)return'';return y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0')};
   let mm;
-  if((mm=raw.match(/\b(20\d{2})\s*[-/]\s*(\d{1,2})\s*[-/]\s*(\d{1,2})\b/)))date=iso(mm[1],mm[2],mm[3]);
-  if(!date&&(mm=raw.match(/\b(\d{1,2})\s*[-/]\s*(\d{1,2})\s*[-/]\s*(20\d{2}|\d{2})\b/)))date=iso(mm[3],mm[1],mm[2]);
-  if(!date&&(mm=raw.match(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(\d{1,2}),?\s+(20\d{2})\b/i)))date=iso(mm[3],MONTHS[mm[1].slice(0,3).toLowerCase()],mm[2]);
-  if(!date&&(mm=raw.match(/\b(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s*,?\s+(20\d{2})\b/i)))date=iso(mm[3],MONTHS[mm[2].slice(0,3).toLowerCase()],mm[1]);
+  if((mm=raw.match(/\b(20\d{2})\s*[-/]\s*(\d{1,2})\s*[-/]\s*(\d{1,2})\b/))){date=iso(mm[1],mm[2],mm[3]);if(date){dateConf='high';dateSource='full date'}}
+  if(!date&&(mm=raw.match(/\b(\d{1,2})\s*[-/]\s*(\d{1,2})\s*[-/]\s*(20\d{2}|\d{2})\b/))){date=iso(mm[3],mm[1],mm[2]);if(date){dateConf=(String(mm[3]).length===2)?'low':'high';dateSource=(String(mm[3]).length===2)?'2-digit year':'full date'}}
+  if(!date&&(mm=raw.match(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(\d{1,2}),?\s+(20\d{2})\b/i))){date=iso(mm[3],MONTHS[mm[1].slice(0,3).toLowerCase()],mm[2]);if(date){dateConf='high';dateSource='written date'}}
+  if(!date&&(mm=raw.match(/\b(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s*,?\s+(20\d{2})\b/i))){date=iso(mm[3],MONTHS[mm[2].slice(0,3).toLowerCase()],mm[1]);if(date){dateConf='high';dateSource='written date'}}
   /* ---- total: TOTAL line wins; never subtotal/tax when a total exists ---- */
   const amountsIn=s=>{const out=[];const re=/\$?\s*(\d{1,3}(?:,\d{3})+|\d+)\.(\d{2})\b/g;let x;while((x=re.exec(s))!==null){const v=parseFloat((x[1]+'.'+x[2]).replace(/,/g,''));if(v>0&&v<100000)out.push(v)}return out};
   let total=null;
@@ -1694,30 +1714,138 @@ function parseReceiptText(text){
       totalAmts.push(...a);
     }
   });
-  if(totalAmts.length)total=Math.max(...totalAmts);
+  let totalSource='';
+  if(totalAmts.length){total=Math.max(...totalAmts);totalSource='total-line'}
   if(total===null){ /* fallback: largest amount on the receipt (ignoring change/tendered lines) */
     let all=[];
     lines.forEach(L=>{if(/change|tendered|you saved|savings/i.test(L))return;all.push(...amountsIn(L))});
-    if(all.length)total=Math.max(...all);
+    if(all.length){total=Math.max(...all);totalSource='largest-amount'}
   }
-  return {vendor,date,total};
+  /* ---- per-field confidence (rank 4): 'high' = read straight from a
+     labelled line; 'low' = guessed/fallback, so review eyes go there.
+     Vendor is solid only when it is the clean top line of the receipt;
+     a TOTAL line is solid, the largest-amount fallback is a guess; a
+     2-digit-year date is a guess, a full/written date is solid. ---- */
+  const confidence={
+    vendor:vendor?((vendorIdx===0&&!vendorCleaned)?'high':'low'):null,
+    date:date?dateConf:null,
+    total:total!=null?(totalSource==='total-line'?'high':'low'):null
+  };
+  const sources={vendor:vendor?(vendorIdx===0?'top line':'line '+(vendorIdx+1)+' of the receipt'):'',date:dateSource,total:totalSource};
+  return {vendor,date,total,confidence,sources};
+}
+/* ---- per-field confidence flags (rank 4) ----
+   ONLY low-confidence fields get a flag: on the quick-confirm card and
+   under the matching form field, so Nathan's review eyes go straight to
+   the guesses. Solid fields stay unmarked. Reasons say HOW the field was
+   derived (e.g. total: 'no TOTAL line — largest amount used'). */
+const SCAN_FLAG_REASONS={
+  vendor:'guessed from the top lines',
+  date:'2-digit year — check the year',
+  total:'no TOTAL line — largest amount used',
+  cat:'no store match — default category',
+  biz:'no store match — default business'
+};
+function scanFlagReason(k,conf){
+  if((k==='cat'||k==='biz')&&conf&&conf[k+'Reason']==='vendor')return 'based on a guessed vendor';
+  return SCAN_FLAG_REASONS[k]||'needs a look';
+}
+function clearFieldFlags(){document.querySelectorAll('#txnForm .fieldFlag').forEach(el=>el.remove())}
+function applyFieldFlags(conf){
+  clearFieldFlags();if(!conf)return;
+  const map={vendor:'#fDesc',date:'#fDate',total:'#fAmt',cat:'#fCat',biz:'#fBiz'};
+  Object.keys(map).forEach(k=>{
+    if(conf[k]!=='low')return;
+    const input=$(map[k]);if(!input)return;
+    const fld=input.closest('.fld');if(!fld)return;
+    const d=document.createElement('div');d.className='fieldFlag';d.dataset.flagFor=k;
+    d.textContent='⚠️ Check: '+scanFlagReason(k,conf);fld.appendChild(d);
+  });
+}
+function lowScanFields(conf){
+  if(!conf)return[];
+  const labels={vendor:'Vendor',date:'Date',total:'Total',cat:'Category',biz:'Business'};
+  return Object.keys(labels).filter(k=>conf[k]==='low').map(k=>labels[k]);
 }
 function applyScanToForm(p){
   const found=[];
   if(p.vendor){const dEl=$('#fDesc');if(dEl)dEl.value=p.vendor;found.push('store: '+p.vendor)}
   if(p.date){const dt=$('#fDate');if(dt)dt.value=p.date;found.push('date '+p.date)}
   if(p.total!=null){const aEl=$('#fAmt');if(aEl)aEl.value=p.total.toFixed(2);found.push(fmt$(p.total))}
+  const pc=p.confidence||{};
+  const conf={vendor:p.vendor?(pc.vendor||'low'):null,date:p.date?(pc.date||'high'):null,total:p.total!=null?(pc.total||'low'):null,cat:null,biz:null,sources:p.sources||{}};
   if(p.vendor){
     if(formType!=='expense'){const se=$('#segExp');if(se)se.click()} /* receipts are expenses; also rebuilds the category list */
     const a=autoCat(p.vendor,-1);
     if(a.biz){const b=$('#fBiz');if(b)b.value=a.biz;const o=$('#fOwner');if(o)o.value=ownerForBiz(a.biz)}
     const c=$('#fCat');if(c&&[...c.options].some(o=>o.value===a.cat))c.value=a.cat;
     if(a.biz)found.push('→ '+bizName(a.biz)+' / '+catName(a.cat));
+    /* category/business are derived from the vendor: they are guesses
+       when no store rule matched (autoCat expense fallback is exactly
+       other/cfp) or when the vendor itself was a guess. */
+    const guessedCat=(a.cat==='other'&&a.biz==='cfp');
+    conf.cat=(guessedCat||conf.vendor==='low')?'low':'high';
+    conf.biz=(guessedCat||conf.vendor==='low')?'low':'high';
+    if(guessedCat){conf.catReason='default';conf.bizReason='default'}
+    else if(conf.vendor==='low'){conf.catReason='vendor';conf.bizReason='vendor'}
   }
+  lastScanConfidence=conf;
+  applyFieldFlags(conf);
   return found;
+}
+/* ---- quick-confirm card (rank 3): one-glance review after OCR ----
+   Shows the photo thumbnail + the parsed vendor/date/total/category/
+   business as big readable rows, with the full form collapsed behind
+   'Edit details'. Preview-before-commit still holds: 'Looks right — Save'
+   is Nathan's explicit tap (it submits the normal form, with its normal
+   validation and Vault attach) — nothing is auto-logged. */
+function setTxnFieldsCollapsed(collapse){
+  const form=$('#txnForm');if(!form)return;
+  [...form.children].forEach(el=>{
+    if(el.id==='scanBox'||el.classList.contains('txnActions'))return;
+    if(collapse){if(el.dataset.qcPrevDisplay===undefined)el.dataset.qcPrevDisplay=el.style.display||'';el.style.display='none'}
+    else if(el.dataset.qcPrevDisplay!==undefined){el.style.display=el.dataset.qcPrevDisplay;delete el.dataset.qcPrevDisplay}
+  });
+}
+function clearQuickConfirm(){const qc=$('#quickConfirm');if(qc)qc.innerHTML='';setTxnFieldsCollapsed(false)}
+function expandQuickConfirm(){clearQuickConfirm();const d=$('#fDesc');if(d)d.focus()}
+function saveQuickConfirm(){
+  const missing=[];
+  if(!($('#fDesc')&&$('#fDesc').value.trim()))missing.push('description');
+  if(!($('#fDate')&&$('#fDate').value))missing.push('date');
+  if(!($('#fAmt')&&$('#fAmt').value))missing.push('amount');
+  if(missing.length){toast('✏️ Add the '+missing.join(', ')+' first — opening the full form');expandQuickConfirm();return}
+  const form=$('#txnForm');if(form)form.requestSubmit();
+}
+function showQuickConfirm(){
+  const qc=$('#quickConfirm');if(!qc)return;
+  const desc=($('#fDesc')&&$('#fDesc').value.trim())||'';
+  const date=($('#fDate')&&$('#fDate').value)||'';
+  const amtRaw=($('#fAmt')&&$('#fAmt').value)||'';
+  const amt=amtRaw?fmt$(parseFloat(amtRaw)||0):'';
+  const cat=$('#fCat')?catName($('#fCat').value):'';
+  const biz=$('#fBiz')?bizName($('#fBiz').value):'';
+  const conf=lastScanConfidence;
+  const row=(label,val,key)=>{
+    if(!val)return `<div class="qcRow"><span>${label}</span><b>⚠️ check</b></div>`;
+    if(conf&&key&&conf[key]==='low')return `<div class="qcRow low"><span>${label}</span><b>${esc(val)}<br><span class="qcFlag">⚠️ check — ${esc(scanFlagReason(key,conf))}</span></b></div>`;
+    return `<div class="qcRow"><span>${label}</span><b>${esc(val)}</b></div>`;
+  };
+  const low=lowScanFields(conf);
+  qc.innerHTML=`<div class="qcCard" id="qcCard">
+    <div class="qcHead">${stagedReceipt?`<img src="${stagedReceipt.dataUrl}" alt="receipt photo">`:''}<div><div style="font-size:17px;font-weight:800">🧾 Does this look right?</div><div style="font-size:13px;color:var(--mut)">One glance, then save — or open the full form to fix anything.</div></div></div>
+    ${row('🏪 Vendor',desc,'vendor')}${row('📅 Date',date,'date')}${row('💵 Total',amt,'total')}${row('🏷️ Category',cat,'cat')}${row('🏢 Business',biz,'biz')}
+    ${low.length?`<div class="qcNote">⚠️ ${low.join(', ')} need${low.length===1?'s':''} a closer look — flagged above. Everything else read solid.</div>`:''}
+    <button type="button" class="qcSave" id="qcSaveBtn">✅ Looks right — Save</button>
+    <button type="button" class="qcEdit" id="qcEditBtn">✏️ Edit details</button>
+  </div>`;
+  const sv=$('#qcSaveBtn');if(sv)sv.onclick=saveQuickConfirm;
+  const ed=$('#qcEditBtn');if(ed)ed.onclick=expandQuickConfirm;
+  setTxnFieldsCollapsed(true);
 }
 async function handleReceiptFile(file){
   const st=$('#scanStatus'),pv=$('#receiptPreview');
+  clearQuickConfirm();lastScanConfidence=null;clearFieldFlags();
   if(!file||!file.type||!file.type.startsWith('image/')){if(st)st.innerHTML='⚠️ That file is not a photo — pick a receipt image.';return}
   if(st)st.textContent='🗜️ Compressing photo…';
   try{stagedReceipt=await compressImageFile(file)}catch(e){if(st)st.innerHTML='⚠️ Could not read that photo file. Try again — or fill the form in by hand.';return}
@@ -1729,7 +1857,9 @@ async function handleReceiptFile(file){
     const p=parseReceiptText(text);
     if(!p.vendor&&!p.date&&p.total==null)throw new Error('nothing parsed');
     const found=applyScanToForm(p);
-    if(st)st.innerHTML='✅ Scanned — found '+esc(found.join(' · '))+'. <b>Check everything, then tap Save</b> — nothing is logged until you do.';
+    showQuickConfirm();
+    const lowF=lowScanFields(lastScanConfidence);
+    if(st)st.innerHTML='✅ Scanned — found '+esc(found.join(' · '))+'. <b>Check the quick-confirm card, then tap Save</b> — nothing is logged until you do.'+(lowF.length?' <b>⚠️ Flagged for a closer look: '+esc(lowF.join(', '))+'.</b>':'');
     toast('📷 Receipt scanned — review & save');
   }catch(e){
     if(st)st.innerHTML='⚠️ Couldn\'t read that photo clearly — no problem: fill the form in by hand below. <b>The photo is still attached</b> and will save with the transaction.';
@@ -1792,7 +1922,7 @@ async function persistStagedPhoto(){
 function registerPhotoDoc(docId,meta){
   DB.docs.push({id:docId,name:meta.name||'Photo',type:meta.type||'Receipt',biz:meta.biz||'per',year:meta.year||curYear,mime:stagedPhoto?stagedPhoto.mime:'image/webp',added:todayStr(),sizeKB:stagedPhoto?stagedPhoto.sizeKB:0,txnId:meta.txnId||'',linkId:meta.linkId||''});
 }
-window.__n8booksScan={parseReceiptText,compressImageFile,runReceiptOCR,applyScanToForm,handleReceiptFile,parse:parseReceiptText,photoBoxHTML,wirePhotoBox,persistStagedPhoto,registerPhotoDoc};
+window.__n8booksScan={parseReceiptText,compressImageFile,runReceiptOCR,applyScanToForm,handleReceiptFile,parse:parseReceiptText,photoBoxHTML,wirePhotoBox,persistStagedPhoto,registerPhotoDoc,showQuickConfirm,clearQuickConfirm,expandQuickConfirm,saveQuickConfirm,getLastScanConfidence:()=>lastScanConfidence,lowScanFields,scanFlagReason};
 </script>
 <script>
 'use strict';
