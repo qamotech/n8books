@@ -159,6 +159,9 @@ tr:hover td{background:color-mix(in srgb,var(--panel2) 55%,transparent)}
 .toast{background:var(--panel);border:1px solid var(--acc);color:var(--txt);padding:11px 20px;border-radius:30px;font-weight:600;box-shadow:var(--sh);animation:tin .35s cubic-bezier(.34,1.4,.64,1)}
 @keyframes tin{from{transform:translateY(20px);opacity:0}to{transform:none;opacity:1}}
 .toast.out{opacity:0;transition:.4s}
+.toastAct{display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:center;max-width:92vw}
+.toastBtn{background:linear-gradient(90deg,var(--acc2),var(--acc));color:#fff;border:none;border-radius:20px;padding:9px 16px;font-size:15px;font-weight:800;cursor:pointer;box-shadow:0 4px 14px rgba(90,60,220,.35);white-space:nowrap}
+.toastBtn:active{transform:scale(.97)}
 
 /* ---------- footer ---------- */
 footer{border-top:1px solid var(--line);background:var(--bg2);padding:44px 22px 30px;margin-top:30px}
@@ -376,6 +379,7 @@ const yearMiles=()=>DB.mileage.filter(m=>yrOf(m.date)===curYear);
 
 /* ================= UI CORE ================= */
 function toast(msg){const t=document.createElement('div');t.className='toast';t.textContent=msg;$('#toasts').appendChild(t);setTimeout(()=>{t.classList.add('out');setTimeout(()=>t.remove(),450)},2800)}
+function toastWithScanAnother(msg){const t=document.createElement('div');t.className='toast toastAct';const s=document.createElement('span');s.textContent=msg;t.appendChild(s);const b=document.createElement('button');b.type='button';b.className='toastBtn';b.id='scanAnotherBtn';b.textContent='📸 Scan another';b.onclick=()=>{t.remove();openScanReceipt()};t.appendChild(b);$('#toasts').appendChild(t);setTimeout(()=>{t.classList.add('out');setTimeout(()=>t.remove(),450)},8000)}
 function go(page){
   $$('#navlinks button').forEach(b=>b.classList.toggle('on',b.dataset.page===page));
   $$('section.page').forEach(s=>s.classList.toggle('on',s.id==='page-'+page));
@@ -513,8 +517,20 @@ function drawDonut(cv,top,totalExp){
 }
 
 /* ================= ADD / EDIT TRANSACTION ================= */
+/* ---- remembered form defaults (rank 7) ----
+   The last business + payment method Nathan actually SAVED are kept in
+   localStorage (device-local, outside the books data/Drive backup) and
+   pre-selected on the next NEW transaction form, so repeat receipts for
+   the same business stop paying two dropdown hunts per entry. Edits keep
+   the entry's own values; a receipt scan's autoCat pick and the
+   description-blur rule can still override the business afterwards.
+   Nothing auto-logged: these are only pre-selections Nathan reviews. */
+function lastFormDefaults(){try{const biz=localStorage.getItem('n8books_lastBiz')||'';const method=localStorage.getItem('n8books_lastMethod')||'';return {biz:BIZ.some(b=>b.id===biz)?biz:'',method:METHODS.includes(method)?method:''}}catch(e){return {biz:'',method:''}}}
+function rememberFormDefaults(biz,method){try{if(biz&&BIZ.some(b=>b.id===biz))localStorage.setItem('n8books_lastBiz',biz);if(method&&METHODS.includes(method))localStorage.setItem('n8books_lastMethod',method)}catch(e){}}
 function txnForm(t,type,group){
   const cats=CATS.filter(c=>c[2]===(t?t.type:type));
+  const defBiz=t?t.biz:(lastFormDefaults().biz||'cfp');
+  const defMethod=t?t.method:(lastFormDefaults().method||'');
   return `<h3>${t?'✏️ Edit':'➕ Add'} Transaction</h3>
   <form id="txnForm">
     <div id="scanBox" style="background:var(--panel2);border:1px dashed var(--line);border-radius:12px;padding:12px;margin-bottom:14px">
@@ -523,9 +539,11 @@ function txnForm(t,type,group){
         <button type="button" class="btn ghost small" id="scanBtnGal">🖼️ Pick from gallery</button>
         <span style="font-size:12.5px;color:var(--mut)">Snap a receipt — N8Books reads it and pre-fills the form. You review &amp; save — nothing is ever auto-logged.</span>
       </div>
+      <div id="scanGuide" style="font-size:12.5px;color:var(--mut);margin-top:8px">💡 For a clean read: <b style="color:var(--txt)">fill the frame</b> with the receipt · <b style="color:var(--txt)">good light</b>, no shadow · <b style="color:var(--txt)">flatten the receipt</b> flat first.</div>
       <input type="file" id="receiptFileCam" accept="image/*" capture="environment" hidden>
       <input type="file" id="receiptFileGal" accept="image/*" hidden>
       <div id="scanStatus" style="font-size:13.5px;margin-top:8px;min-height:18px"></div>
+      <div id="scanRetake" style="margin-top:6px"></div>
       <div id="receiptPreview" style="margin-top:6px"></div>
       <div id="quickConfirm" style="margin-top:6px"></div>
       ${t&&t.docId?`<div style="display:flex;gap:10px;align-items:center;margin-top:8px"><img data-docimg="${t.docId}" alt="attached receipt" style="width:64px;height:64px;object-fit:cover;border-radius:8px;background:var(--panel)"><span style="font-size:13.5px">📎 Receipt attached</span><button type="button" class="btn ghost small" onclick="viewDoc('${t.docId}')">👁 View receipt</button><span style="font-size:12.5px;color:var(--mut)">Scanning a new one replaces the link (old photo stays in the Vault).</span></div>`:''}
@@ -536,9 +554,9 @@ function txnForm(t,type,group){
     <div class="frow"><div class="fld" style="flex:2"><label>Description</label><input id="fDesc" required placeholder="e.g. Tile job deposit — Erika" value="${t?esc(t.desc):''}"></div>
     <div class="fld"><label>Amount ($)</label><input id="fAmt" type="number" step="0.01" min="0" required placeholder="0.00" value="${t?t.amount:''}"></div></div>
     <div class="frow"><div class="fld"><label>Category</label><select id="fCat">${cats.map(c=>`<option value="${c[0]}" ${t&&t.cat===c[0]?'selected':''}>${c[1]}</option>`).join('')}</select></div>
-    <div class="fld"><label>Business</label><select id="fBiz">${BIZ.map(b=>`<option value="${b.id}" ${t&&t.biz===b.id?'selected':''}>${b.e} ${b.n}</option>`).join('')}</select></div></div>
-    <div class="frow"><div class="fld"><label>Payment Method</label><select id="fMethod">${METHODS.map(m=>`<option ${t&&t.method===m?'selected':''}>${m}</option>`).join('')}</select></div>
-    <div class="fld"><label>Whose Name? (owner)</label><select id="fOwner">${OWNERS.map(o=>`<option value="${o[0]}" ${(t?(t.owner||'joint'):ownerForBiz('per'))===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></div>
+    <div class="fld"><label>Business</label><select id="fBiz">${BIZ.map(b=>`<option value="${b.id}" ${defBiz===b.id?'selected':''}>${b.e} ${b.n}</option>`).join('')}</select></div></div>
+    <div class="frow"><div class="fld"><label>Payment Method</label><select id="fMethod">${METHODS.map(m=>`<option ${defMethod===m?'selected':''}>${m}</option>`).join('')}</select></div>
+    <div class="fld"><label>Whose Name? (owner)</label><select id="fOwner">${OWNERS.map(o=>`<option value="${o[0]}" ${(t?(t.owner||'joint'):ownerForBiz(defBiz||'per'))===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></div>
     <div class="fld" style="flex:2"><label>Note (optional)</label><input id="fNote" placeholder="Job name, invoice #, anything useful" value="${t?esc(t.note||''):''}"></div></div>
     <div class="fld" style="margin-top:4px"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;color:var(--txt)"><input type="checkbox" id="fSplit" ${group?'checked':''} style="width:18px;height:18px"> ✂️ Split this across categories / businesses</label></div>
     <div id="splitBox" style="display:${group?'block':'none'}">
@@ -609,8 +627,10 @@ function wireTxnForm(t,group){
       let firstId='';
       rows.forEach(r=>{const nt={id:uid(),...base,amount:r.amount,cat:r.cat,biz:r.biz,owner:r.owner,note:r.note||$('#fNote').value.trim(),src:stagedReceipt?'scan':'manual',splitId:sid};if(newDocId)nt.docId=newDocId;nt.sig=txnSig(nt);DB.txns.push(nt);if(!firstId)firstId=nt.id});
       if(newDocId)registerReceiptDoc(newDocId,firstId,base.desc,rows[0].biz,base.date);
+      const wasScanSplit=!!newDocId||!!stagedReceipt;
       stagedReceipt=null;
-      saveDB();fillYears();closeModal();toast('✂️ Split saved — '+rows.length+' lines!');render(currentPage());return;
+      rememberFormDefaults(rows[0]&&rows[0].biz,base.method);
+      saveDB();fillYears();closeModal();if(wasScanSplit&&!t&&!(group&&group.length))toastWithScanAnother('✂️ Split saved — '+rows.length+' lines!');else toast('✂️ Split saved — '+rows.length+' lines!');render(currentPage());return;
     }
     await persistReceipt();
     const data={...base,amount:amt,cat:$('#fCat').value,biz:$('#fBiz').value,note:$('#fNote').value.trim(),owner:$('#fOwner').value};
@@ -618,8 +638,10 @@ function wireTxnForm(t,group){
     let savedId='';
     if(t){Object.assign(t,data);t.sig=txnSig(t);savedId=t.id}else{const nt={id:uid(),...data,src:stagedReceipt?'scan':'manual'};nt.sig=txnSig(nt);DB.txns.push(nt);savedId=nt.id}
     if(newDocId)registerReceiptDoc(newDocId,savedId,data.desc,data.biz,data.date);
+    const wasScan=!!newDocId||!!stagedReceipt;
     stagedReceipt=null;
-    saveDB();fillYears();closeModal();toast(t?'💾 Saved!':'✅ Added!');render(currentPage());
+    rememberFormDefaults(data.biz,data.method);
+    saveDB();fillYears();closeModal();if(wasScan&&!t)toastWithScanAnother('✅ Added!');else toast(t?'💾 Saved!':'✅ Added!');render(currentPage());
   });
 }
 function delTxn(id){const t=DB.txns.find(x=>x.id===id);if(t&&t.splitId){DB.txns=DB.txns.filter(x=>x.splitId!==t.splitId);toast('🗑 Whole split deleted')}else{DB.txns=DB.txns.filter(x=>x.id!==id);toast('🗑 Deleted')}saveDB();closeModal();render(currentPage())}
@@ -1652,6 +1674,38 @@ function compressImageFile(file){
     img.src=URL.createObjectURL(file);
   });
 }
+/* ---- OCR image pre-processing (rank 7) ----
+   Before OCR only, the receipt photo is re-rendered as a grayscale,
+   contrast-boosted, slightly upscaled PNG copy: faint thermal-print
+   text gets darker on a cleaner white ground, which raises Tesseract's
+   first-pass accuracy. The staged photo itself is NOT touched — the
+   Vault still stores the true original compressed photo, and the
+   preview Nathan reviews is that original. Any failure here falls
+   back to OCR-ing the original image exactly as before. */
+function preprocessImageForOCR(dataUrl){
+  return new Promise(res=>{
+    try{
+      const img=new Image();
+      img.onload=()=>{
+        try{
+          const scale=Math.min(2,Math.max(1,1400/Math.max(img.width,img.height)));
+          const cv=document.createElement('canvas');cv.width=Math.max(1,Math.round(img.width*scale));cv.height=Math.max(1,Math.round(img.height*scale));
+          const ctx=cv.getContext('2d');ctx.drawImage(img,0,0,cv.width,cv.height);
+          const id=ctx.getImageData(0,0,cv.width,cv.height),px=id.data;
+          for(let i=0;i<px.length;i+=4){
+            const gray=0.299*px[i]+0.587*px[i+1]+0.114*px[i+2];
+            let v=(gray-128)*1.6+128;v=v<0?0:v>255?255:v;
+            px[i]=v;px[i+1]=v;px[i+2]=v;
+          }
+          ctx.putImageData(id,0,0);
+          res(cv.toDataURL('image/png'));
+        }catch(e){res(dataUrl)}
+      };
+      img.onerror=()=>res(dataUrl);
+      img.src=dataUrl;
+    }catch(e){res(dataUrl)}
+  });
+}
 let _tessLoading=null;
 function loadTesseract(){
   if(window.Tesseract)return Promise.resolve(window.Tesseract);
@@ -1843,16 +1897,38 @@ function showQuickConfirm(){
   const ed=$('#qcEditBtn');if(ed)ed.onclick=expandQuickConfirm;
   setTxnFieldsCollapsed(true);
 }
+/* ---- capture guidance + Retake (rank 6) ----
+   The guidance line lives in the scan box (see #scanGuide in txnForm).
+   A poor scan result — OCR could not read the photo, or fields came
+   back low-confidence — gets a '🔄 Retake photo' button right next to
+   the result (in #scanRetake) instead of making Nathan start over:
+   one tap re-opens the camera. Nothing auto-logged: a retaken photo
+   still only pre-fills, and the previous photo/form values stay in
+   place until a new photo is actually picked, so cancelling the
+   camera loses nothing. */
+function clearScanRetake(){const r=$('#scanRetake');if(r)r.innerHTML=''}
+function showScanRetake(msg){
+  const r=$('#scanRetake');if(!r)return;
+  r.innerHTML='';
+  const b=document.createElement('button');b.type='button';b.className='btn ghost small';b.id='scanRetakeBtn';b.textContent='🔄 Retake photo';b.onclick=retakeReceiptScan;r.appendChild(b);
+  if(msg){const s=document.createElement('span');s.style.cssText='font-size:12.5px;color:var(--mut);margin-left:8px';s.textContent=msg;r.appendChild(s)}
+}
+function retakeReceiptScan(){
+  clearQuickConfirm();clearScanRetake();
+  const st=$('#scanStatus');if(st)st.textContent='📷 Retake — fill the frame, good light, flatten the receipt flat.';
+  const cam=$('#receiptFileCam');if(cam)cam.click();else if($('#scanBtnCam'))$('#scanBtnCam').click();
+}
 async function handleReceiptFile(file){
   const st=$('#scanStatus'),pv=$('#receiptPreview');
-  clearQuickConfirm();lastScanConfidence=null;clearFieldFlags();
+  clearQuickConfirm();lastScanConfidence=null;clearFieldFlags();clearScanRetake();
   if(!file||!file.type||!file.type.startsWith('image/')){if(st)st.innerHTML='⚠️ That file is not a photo — pick a receipt image.';return}
   if(st)st.textContent='🗜️ Compressing photo…';
   try{stagedReceipt=await compressImageFile(file)}catch(e){if(st)st.innerHTML='⚠️ Could not read that photo file. Try again — or fill the form in by hand.';return}
   if(pv)pv.innerHTML='<img src="'+stagedReceipt.dataUrl+'" alt="receipt preview" style="max-height:140px;border-radius:10px;border:1px solid var(--line)"><div style="font-size:12.5px;color:var(--mut);margin-top:4px">📎 This photo will attach to the transaction when you save.</div>';
   if(st)st.textContent='🔎 Reading receipt… (the first scan downloads the OCR reader — needs internet once)';
   try{
-    const text=await runReceiptOCR(stagedReceipt.dataUrl,pct=>{if(st)st.textContent='🔎 Reading receipt… '+pct+'%'});
+    const ocrUrl=await preprocessImageForOCR(stagedReceipt.dataUrl);
+    const text=await runReceiptOCR(ocrUrl,pct=>{if(st)st.textContent='🔎 Reading receipt… '+pct+'%'});
     scannedText=text;
     const p=parseReceiptText(text);
     if(!p.vendor&&!p.date&&p.total==null)throw new Error('nothing parsed');
@@ -1860,9 +1936,11 @@ async function handleReceiptFile(file){
     showQuickConfirm();
     const lowF=lowScanFields(lastScanConfidence);
     if(st)st.innerHTML='✅ Scanned — found '+esc(found.join(' · '))+'. <b>Check the quick-confirm card, then tap Save</b> — nothing is logged until you do.'+(lowF.length?' <b>⚠️ Flagged for a closer look: '+esc(lowF.join(', '))+'.</b>':'');
+    if(lowF.length)showScanRetake('That scan looks shaky on '+lowF.join(', ')+' — a retake in better light may read cleaner.');
     toast('📷 Receipt scanned — review & save');
   }catch(e){
     if(st)st.innerHTML='⚠️ Couldn\'t read that photo clearly — no problem: fill the form in by hand below. <b>The photo is still attached</b> and will save with the transaction.';
+    showScanRetake('Better light / flatter usually fixes it — or just fill the form in by hand.');
   }
 }
 async function vaultPutReceipt(){
@@ -1922,7 +2000,7 @@ async function persistStagedPhoto(){
 function registerPhotoDoc(docId,meta){
   DB.docs.push({id:docId,name:meta.name||'Photo',type:meta.type||'Receipt',biz:meta.biz||'per',year:meta.year||curYear,mime:stagedPhoto?stagedPhoto.mime:'image/webp',added:todayStr(),sizeKB:stagedPhoto?stagedPhoto.sizeKB:0,txnId:meta.txnId||'',linkId:meta.linkId||''});
 }
-window.__n8booksScan={parseReceiptText,compressImageFile,runReceiptOCR,applyScanToForm,handleReceiptFile,parse:parseReceiptText,photoBoxHTML,wirePhotoBox,persistStagedPhoto,registerPhotoDoc,showQuickConfirm,clearQuickConfirm,expandQuickConfirm,saveQuickConfirm,getLastScanConfidence:()=>lastScanConfidence,lowScanFields,scanFlagReason};
+window.__n8booksScan={parseReceiptText,compressImageFile,preprocessImageForOCR,lastFormDefaults,rememberFormDefaults,runReceiptOCR,applyScanToForm,handleReceiptFile,parse:parseReceiptText,photoBoxHTML,wirePhotoBox,persistStagedPhoto,registerPhotoDoc,showQuickConfirm,clearQuickConfirm,expandQuickConfirm,saveQuickConfirm,getLastScanConfidence:()=>lastScanConfidence,lowScanFields,scanFlagReason,toastWithScanAnother,openScanReceipt,retakeReceiptScan,showScanRetake,clearScanRetake};
 </script>
 <script>
 'use strict';
