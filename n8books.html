@@ -53,6 +53,11 @@ nav.scrolled{box-shadow:var(--sh);padding:8px 22px}
 select,input,textarea{font:inherit}
 .yrsel,.themesw{background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:8px 10px;cursor:pointer;font-weight:600}
 .themesw{font-size:16px}
+.backupChip{background:var(--panel2);color:var(--txt);border:1px solid var(--grn);border-radius:20px;padding:8px 12px;cursor:pointer;font-weight:700;font-size:13px;white-space:nowrap;transition:.2s}
+.backupChip:hover{border-color:var(--acc);transform:translateY(-1px)}
+.backupChip:active{transform:scale(.97)}
+.backupChip.warn{border-color:var(--gold);color:var(--gold)}
+.backupChip.stale{border-color:var(--red);color:var(--red)}
 .btn{background:linear-gradient(90deg,var(--acc2),var(--acc));color:#fff;border:none;border-radius:11px;padding:10px 18px;font-weight:700;cursor:pointer;transition:.2s;box-shadow:0 4px 14px rgba(90,60,220,.35)}
 .btn:hover{transform:translateY(-2px);box-shadow:0 8px 22px rgba(90,60,220,.5)}
 .btn:active{transform:scale(.97)}
@@ -67,6 +72,23 @@ header.hero{padding:130px 22px 30px;text-align:center;position:relative}
 @keyframes shimmer{to{background-position:200% 0}}
 .hero p{color:var(--mut);font-size:clamp(15px,2.4vw,19px);margin-top:12px}
 .hero .cta{margin-top:22px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.globalSearch{max-width:720px;margin:20px auto 0;text-align:left}
+.globalSearch input{width:100%;background:var(--panel);border:1px solid var(--line);color:var(--txt);border-radius:14px;padding:13px 16px;outline:none;font-size:16px;box-shadow:var(--sh)}
+.globalSearch input:focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(76,201,240,.18)}
+.globalSearchResults{margin-top:10px;background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:var(--sh)}
+.globalSearchResults:empty{display:none}
+.gsGroup{padding:8px 14px 4px;font-size:12px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--mut)}
+.gsRow{display:flex;justify-content:space-between;gap:14px;width:100%;text-align:left;background:none;border:none;border-top:1px solid var(--line);color:var(--txt);padding:11px 14px;cursor:pointer;font:inherit}
+.gsRow:hover{background:var(--panel2)}
+.gsRow b{font-weight:700}.gsRow span{color:var(--mut);font-size:13px;text-align:right}
+.gsEmpty{padding:14px;color:var(--mut);font-size:14px}
+.monthSnap .msGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:6px}
+@media(max-width:700px){.monthSnap .msGrid{grid-template-columns:1fr}}
+.msItem{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.msItem .lab{color:var(--mut);font-size:12.5px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase}
+.msItem .big{font-size:26px;font-weight:800;margin-top:5px}
+.msDelta{font-size:13.5px;font-weight:700;margin-top:5px}
+.msDelta.mut{color:var(--mut)}
 
 /* ---------- layout / cards ---------- */
 main{max-width:1240px;margin:0 auto;padding:10px 22px 60px}
@@ -175,7 +197,7 @@ footer{border-top:1px solid var(--line);background:var(--bg2);padding:44px 22px 
 .prog{height:10px;background:var(--panel2);border-radius:6px;overflow:hidden;margin-top:8px}
 .prog i{display:block;height:100%;background:linear-gradient(90deg,var(--acc),var(--grn));border-radius:6px;transition:width .8s cubic-bezier(.2,.8,.25,1)}
 .empty{color:var(--mut);text-align:center;padding:26px;font-size:15px}
-@media(max-width:700px){.navlinks{display:none}.hero{padding-top:110px}}
+@media(max-width:700px){.navlinks{display:none}.hero{padding-top:110px}.backupChip{font-size:11.5px;padding:6px 8px}.yrsel{padding:6px 6px}}
 </style>
 </head>
 <body>
@@ -198,6 +220,7 @@ footer{border-top:1px solid var(--line);background:var(--bg2);padding:44px 22px 
     <button data-page="settings">⚙️ Settings</button>
   </div>
   <div class="navright">
+    <button class="backupChip warn" id="backupChip" type="button" onclick="backupChipAction()" title="Google Drive backup status — tap to back up now">⚠️ Not backed up yet</button>
     <select class="yrsel" id="yrSel" title="Tax year"></select>
     <button class="themesw" id="themeBtn" title="Toggle dark / light">🌙</button>
   </div>
@@ -210,6 +233,10 @@ footer{border-top:1px solid var(--line);background:var(--bg2);padding:44px 22px 
     <button class="btn" id="heroScanBtn" onclick="openScanReceipt()">📸 Scan Receipt</button>
     <button class="btn" onclick="openAdd()">➕ Add Transaction</button>
     <button class="btn ghost" onclick="go('import')">📥 Import Bank File</button>
+  </div>
+  <div class="globalSearch">
+    <input id="globalSearchInput" type="search" autocomplete="off" placeholder="🔍 Search everything — transactions, people, invoices, vault…" aria-label="Global search">
+    <div id="globalSearchResults" class="globalSearchResults" aria-live="polite"></div>
   </div>
 </header>
 
@@ -380,6 +407,19 @@ const yearMiles=()=>DB.mileage.filter(m=>yrOf(m.date)===curYear);
 /* ================= UI CORE ================= */
 function toast(msg){const t=document.createElement('div');t.className='toast';t.textContent=msg;$('#toasts').appendChild(t);setTimeout(()=>{t.classList.add('out');setTimeout(()=>t.remove(),450)},2800)}
 function toastWithScanAnother(msg){const t=document.createElement('div');t.className='toast toastAct';const s=document.createElement('span');s.textContent=msg;t.appendChild(s);const b=document.createElement('button');b.type='button';b.className='toastBtn';b.id='scanAnotherBtn';b.textContent='📸 Scan another';b.onclick=()=>{t.remove();openScanReceipt()};t.appendChild(b);$('#toasts').appendChild(t);setTimeout(()=>{t.classList.add('out');setTimeout(()=>t.remove(),450)},8000)}
+/* ================= UNDO (rank 9) =================
+   After deleting or editing an entry, the toast offers an Undo button for
+   ~8 seconds that restores the previous state — a safety net for fat-finger
+   mistakes. Implementation is snapshot-based: the caller captures
+   booksSnapshot() BEFORE mutating, and toastWithUndo(msg, snap) restores
+   that exact snapshot on tap. Only the books collections are snapshotted
+   (settings/theme/Drive state are never touched by an undo). Vault files
+   live in IndexedDB outside the snapshot; delDoc passes an onUndo callback
+   that puts its file back. Nothing here auto-logs or auto-restores: the
+   undo happens only on Nathan's explicit tap, same as Save. */
+function booksSnapshot(){try{return JSON.stringify({txns:DB.txns,mileage:DB.mileage,people:DB.people||[],invoices:DB.invoices||[],docs:DB.docs||[],recurring:DB.recurring||[],taxPayments:DB.taxPayments||[],customCats:DB.customCats||[]})}catch(e){return null}}
+function restoreBooksSnapshot(snap){if(!snap)return false;try{const b=JSON.parse(snap);DB.txns=b.txns||[];DB.mileage=b.mileage||[];DB.people=b.people||[];DB.invoices=b.invoices||[];DB.docs=b.docs||[];DB.recurring=b.recurring||[];DB.taxPayments=b.taxPayments||[];DB.customCats=b.customCats||[];saveDB();fillYears();return true}catch(e){return false}}
+function toastWithUndo(msg,snap,onUndo){if(!snap){toast(msg);return}const t=document.createElement('div');t.className='toast toastAct';const sp=document.createElement('span');sp.textContent=msg;t.appendChild(sp);const b=document.createElement('button');b.type='button';b.className='toastBtn';b.id='undoBtn';b.textContent='↩️ Undo';b.onclick=async()=>{t.remove();if(restoreBooksSnapshot(snap)){if(onUndo){try{await onUndo()}catch(e){}}render(currentPage());toast('↩️ Undone — previous state restored')}else toast('⚠️ Undo failed — that state is gone')};t.appendChild(b);$('#toasts').appendChild(t);setTimeout(()=>{t.classList.add('out');setTimeout(()=>t.remove(),450)},8000)}
 function go(page){
   $$('#navlinks button').forEach(b=>b.classList.toggle('on',b.dataset.page===page));
   $$('section.page').forEach(s=>s.classList.toggle('on',s.id==='page-'+page));
@@ -438,8 +478,35 @@ function totals(list){
   let inc=0,exp=0;for(const t of list){if(t.type==='income')inc+=t.amount;else exp+=t.amount}
   return {inc,exp,net:inc-exp};
 }
+/* ================= MONTH SNAPSHOT (rank 10) =================
+   Compact 'This month vs last month' card at the top of the Dashboard
+   (directly under the hero): income, expenses and net for the current
+   calendar month in the selected year, each with an up/down delta against
+   the previous month, plus this month's top 3 expense categories. Read-only
+   summary — it creates, edits and logs nothing. The previous month is read
+   from all books (not just the selected year) so a January view correctly
+   compares against December of the prior year. */
+function monthKeyOf(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')}
+function monthLabel(key){const p=String(key).split('-');return new Date(+p[0],+p[1]-1,1).toLocaleString('en-US',{month:'long',year:'numeric'})}
+function monthSnapshotData(){
+  const now=new Date();
+  const thisKey=monthKeyOf(new Date(curYear,now.getMonth(),1));
+  const prevKey=monthKeyOf(new Date(curYear,now.getMonth()-1,1));
+  const thisTx=DB.txns.filter(t=>t.date&&t.date.startsWith(thisKey));
+  const prevTx=DB.txns.filter(t=>t.date&&t.date.startsWith(prevKey));
+  const byCat={};thisTx.filter(t=>t.type==='expense').forEach(t=>byCat[t.cat]=(byCat[t.cat]||0)+t.amount);
+  const topCats=Object.entries(byCat).sort((a,b)=>b[1]-a[1]).slice(0,3);
+  return {thisKey,prevKey,thisTx,prevTx,cur:totals(thisTx),prev:totals(prevTx),topCats};
+}
+function monthDelta(cur,prev,kind){
+  const d=cur-prev,arrow=d>0?'▲':d<0?'▼':'→';
+  const cls=d===0?'mut':(kind==='expense'?(d<0?'pos':'neg'):(d>0?'pos':'neg'));
+  const pct=prev!==0?' ('+(d>=0?'+':'')+(d/Math.abs(prev)*100).toFixed(1)+'%)':(cur!==0?' (new)':'');
+  return `<div class="msDelta ${cls}">${arrow} ${fmt$(d)}${pct} vs last month (${fmt$(prev)})</div>`;
+}
 function renderDash(){
   const tx=yearTxns(), T=totals(tx);
+  const snap=monthSnapshotData();
   const now=new Date(), mKey=curYear+'-'+String(now.getMonth()+1).padStart(2,'0');
   const mTx=tx.filter(t=>t.date.startsWith(mKey)), M=totals(mTx);
   const miles=yearMiles().reduce((a,m)=>a+m.miles,0), rate=MILEAGE_RATES[curYear]||0.70, mileDed=miles*rate;
@@ -451,6 +518,18 @@ function renderDash(){
   const recent=[...tx].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,6);
   const estTax=Math.max(0,T.net)*0.22;
   $('#page-dash').innerHTML=`
+  <div class="panel reveal monthSnap" id="monthSnapshot">
+    <h2>🗓️ This Month vs Last Month</h2>
+    <p class="hint">${monthLabel(snap.thisKey)} vs ${monthLabel(snap.prevKey)} — the month's picture in one glance, no tab-hopping.</p>
+    <div class="msGrid">
+      <div class="msItem"><div class="lab">💰 Income</div><div class="big pos" id="monthSnapInc">${fmt$(snap.cur.inc)}</div>${monthDelta(snap.cur.inc,snap.prev.inc,'income')}</div>
+      <div class="msItem"><div class="lab">🧾 Expenses</div><div class="big neg" id="monthSnapExp">${fmt$(snap.cur.exp)}</div>${monthDelta(snap.cur.exp,snap.prev.exp,'expense')}</div>
+      <div class="msItem"><div class="lab">📈 Net</div><div class="big ${snap.cur.net>=0?'pos':'neg'}" id="monthSnapNet">${fmt$(snap.cur.net)}</div>${monthDelta(snap.cur.net,snap.prev.net,'net')}</div>
+    </div>
+    <div style="margin-top:16px"><div class="lab" style="color:var(--mut);font-size:12.5px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase">🔥 Top Expenses This Month</div>
+    ${snap.topCats.length?snap.topCats.map(([c,v])=>`<div class="kv"><span>${catName(c)}</span><b>${fmt$(v)}</b></div><div class="prog"><i style="width:${snap.cur.exp?Math.round(v/snap.cur.exp*100):0}%"></i></div>`).join(''):'<p class="empty">No expenses yet this month.</p>'}
+    </div>
+  </div>
   <div class="cards">
     <div class="card reveal"><div class="lab">💰 ${curYear} Income</div><div class="big pos" data-count="${T.inc}">$0</div><div class="sub">${tx.filter(t=>t.type==='income').length} income entries</div></div>
     <div class="card reveal"><div class="lab">🧾 ${curYear} Expenses</div><div class="big neg" data-count="${T.exp}">$0</div><div class="sub">${tx.filter(t=>t.type==='expense').length} expense entries</div></div>
@@ -484,6 +563,42 @@ function renderDash(){
   watchReveals();
 }
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+
+/* ================= GLOBAL SEARCH (rank 8) =================
+   One box in the Dashboard header (hero) searches transactions (all years),
+   people, invoices/estimates, and Vault documents together — previously
+   only the Transactions page had search. Results are read-only navigation:
+   nothing is created, edited, or logged by searching. */
+function globalSearch(q){
+  const needle=String(q||'').trim().toLowerCase();
+  if(!needle)return {txns:[],people:[],invoices:[],docs:[],total:0};
+  const hit=(...fields)=>fields.some(f=>String(f||'').toLowerCase().includes(needle));
+  const txns=DB.txns.filter(t=>hit(t.desc,t.note,catName(t.cat),bizName(t.biz),t.method,t.date,String(t.amount))).slice(0,8);
+  const people=(DB.people||[]).filter(p=>hit(p.name,p.note,roleName(p.role))).slice(0,8);
+  const invoices=(DB.invoices||[]).filter(i=>hit(i.num,i.client,i.status,i.note,(i.items||[]).map(x=>x.desc).join(' '))).slice(0,8);
+  const docs=(DB.docs||[]).filter(d=>hit(d.name,d.type,bizName(d.biz),String(d.year))).slice(0,8);
+  return {txns,people,invoices,docs,total:txns.length+people.length+invoices.length+docs.length};
+}
+function gotoGlobalResult(kind,id){
+  const box=$('#globalSearchResults');if(box)box.innerHTML='';const inp=$('#globalSearchInput');if(inp)inp.value='';
+  if(kind==='txn'){openEdit(id)}
+  else if(kind==='person'){go('people')}
+  else if(kind==='invoice'){openInvoice(id)}
+  else if(kind==='doc'){viewDoc(id)}
+}
+function renderGlobalSearch(){
+  const inp=$('#globalSearchInput'),box=$('#globalSearchResults');if(!inp||!box)return;
+  const q=inp.value.trim();if(!q){box.innerHTML='';return}
+  const r=globalSearch(q);
+  if(!r.total){box.innerHTML=`<div class="gsEmpty">No matches for &ldquo;${esc(q)}&rdquo; in transactions, people, invoices, or the Vault.</div>`;return}
+  let h='';
+  if(r.txns.length)h+=`<div class="gsGroup">🧾 Transactions</div>`+r.txns.map(t=>`<button type="button" class="gsRow" onclick="gotoGlobalResult('txn','${t.id}')"><b>${esc(t.desc)}</b><span>${t.date} · ${t.type==='income'?'+':'-'}${fmt$(t.amount)} · ${esc(catName(t.cat))}</span></button>`).join('');
+  if(r.people.length)h+=`<div class="gsGroup">👥 People</div>`+r.people.map(p=>`<button type="button" class="gsRow" onclick="gotoGlobalResult('person','${p.id}')"><b>${esc(p.name)}</b><span>${esc(roleName(p.role))}</span></button>`).join('');
+  if(r.invoices.length)h+=`<div class="gsGroup">🧾 Invoices &amp; Estimates</div>`+r.invoices.map(i=>`<button type="button" class="gsRow" onclick="gotoGlobalResult('invoice','${i.id}')"><b>${esc(i.num)} — ${esc(i.client)}</b><span>${esc(i.status)} · ${fmt$(invTotal(i))}</span></button>`).join('');
+  if(r.docs.length)h+=`<div class="gsGroup">📄 Vault Documents</div>`+r.docs.map(d=>`<button type="button" class="gsRow" onclick="gotoGlobalResult('doc','${d.id}')"><b>${esc(d.name)}</b><span>${esc(d.type)} · ${esc(bizName(d.biz))} · ${d.year}</span></button>`).join('');
+  box.innerHTML=h;
+}
+(function wireGlobalSearch(){const inp=$('#globalSearchInput');if(inp){inp.addEventListener('input',renderGlobalSearch);inp.addEventListener('keydown',e=>{if(e.key==='Escape'){inp.value='';renderGlobalSearch()}})}})();
 
 /* charts (hand-rolled canvas, HiDPI) */
 function prep(cv){if(!cv)return null;const dpr=devicePixelRatio||1,r=cv.getBoundingClientRect();cv.width=r.width*dpr;cv.height=240*dpr;const c=cv.getContext('2d');c.scale(dpr,dpr);return [c,r.width,240]}
@@ -605,6 +720,7 @@ function wireTxnForm(t,group){
   }
   $('#txnForm').addEventListener('submit',async e=>{
     e.preventDefault();
+    const _undoSnap=(t||group)?booksSnapshot():null;
     const amt=Math.abs(parseFloat($('#fAmt').value)||0);if(!amt){toast('Enter an amount');return}
     const base={date:$('#fDate').value,desc:$('#fDesc').value.trim(),type:formType,method:$('#fMethod').value};
     /* receipt scan: persist the staged photo to the Document Vault (after validation, never blocks the save) */
@@ -630,7 +746,7 @@ function wireTxnForm(t,group){
       const wasScanSplit=!!newDocId||!!stagedReceipt;
       stagedReceipt=null;
       rememberFormDefaults(rows[0]&&rows[0].biz,base.method);
-      saveDB();fillYears();closeModal();if(wasScanSplit&&!t&&!(group&&group.length))toastWithScanAnother('✂️ Split saved — '+rows.length+' lines!');else toast('✂️ Split saved — '+rows.length+' lines!');render(currentPage());return;
+      saveDB();fillYears();closeModal();if(wasScanSplit&&!t&&!(group&&group.length))toastWithScanAnother('✂️ Split saved — '+rows.length+' lines!');else if(_undoSnap)toastWithUndo('✂️ Split saved — '+rows.length+' lines!',_undoSnap);else toast('✂️ Split saved — '+rows.length+' lines!');render(currentPage());return;
     }
     await persistReceipt();
     const data={...base,amount:amt,cat:$('#fCat').value,biz:$('#fBiz').value,note:$('#fNote').value.trim(),owner:$('#fOwner').value};
@@ -641,10 +757,10 @@ function wireTxnForm(t,group){
     const wasScan=!!newDocId||!!stagedReceipt;
     stagedReceipt=null;
     rememberFormDefaults(data.biz,data.method);
-    saveDB();fillYears();closeModal();if(wasScan&&!t)toastWithScanAnother('✅ Added!');else toast(t?'💾 Saved!':'✅ Added!');render(currentPage());
+    saveDB();fillYears();closeModal();if(wasScan&&!t)toastWithScanAnother('✅ Added!');else if(t&&_undoSnap)toastWithUndo('💾 Saved!',_undoSnap);else toast(t?'💾 Saved!':'✅ Added!');render(currentPage());
   });
 }
-function delTxn(id){const t=DB.txns.find(x=>x.id===id);if(t&&t.splitId){DB.txns=DB.txns.filter(x=>x.splitId!==t.splitId);toast('🗑 Whole split deleted')}else{DB.txns=DB.txns.filter(x=>x.id!==id);toast('🗑 Deleted')}saveDB();closeModal();render(currentPage())}
+function delTxn(id){const _snap=booksSnapshot();const t=DB.txns.find(x=>x.id===id);const _msg=(t&&t.splitId)?'🗑 Whole split deleted':'🗑 Deleted';if(t&&t.splitId){DB.txns=DB.txns.filter(x=>x.splitId!==t.splitId)}else{DB.txns=DB.txns.filter(x=>x.id!==id)}saveDB();closeModal();render(currentPage());toastWithUndo(_msg,_snap)}
 function currentPage(){const b=$$('#navlinks button').find(x=>x.classList.contains('on'));return b?b.dataset.page:'dash'}
 
 /* ================= TRANSACTIONS PAGE ================= */
@@ -869,6 +985,7 @@ function openMileage(id){
   </form>`);
   wirePhotoBox();
   $('#mileForm').addEventListener('submit',async e=>{e.preventDefault();
+    const _undoSnap=m?booksSnapshot():null;
     const docId=await persistStagedPhoto();
     if(stagedPhoto&&!docId)toast('⚠️ Photo could not be stored on this device — trip still saved');
     const data={date:$('#mDate').value,miles:parseFloat($('#mMiles').value)||0,purpose:$('#mPurpose').value.trim(),biz:$('#mBiz').value};
@@ -876,9 +993,9 @@ function openMileage(id){
     if(m){Object.assign(m,data);if(docId)registerPhotoDoc(docId,{name:'Trip photo — '+data.purpose,type:'Receipt',biz:data.biz,year:yrOf(data.date),linkId:m.id})}
     else{const mid=uid();DB.mileage.push({id:mid,...data});if(docId)registerPhotoDoc(docId,{name:'Trip photo — '+data.purpose,type:'Receipt',biz:data.biz,year:yrOf(data.date),linkId:mid})}
     stagedPhoto=null;
-    saveDB();fillYears();closeModal();toast(m?'✏️ Trip updated!':'🚗 Trip logged!');render(currentPage())});
+    saveDB();fillYears();closeModal();if(m&&_undoSnap)toastWithUndo('✏️ Trip updated!',_undoSnap);else toast(m?'✏️ Trip updated!':'🚗 Trip logged!');render(currentPage())});
 }
-function delMile(id){DB.mileage=DB.mileage.filter(m=>m.id!==id);saveDB();toast('🗑 Deleted');renderMileage()}
+function delMile(id){const _snap=booksSnapshot();DB.mileage=DB.mileage.filter(m=>m.id!==id);saveDB();renderMileage();toastWithUndo('🗑 Deleted',_snap)}
 
 /* ================= TAX CENTER ================= */
 function renderTax(){
@@ -1179,6 +1296,7 @@ function openPerson(id){
   </form>`);
   wirePhotoBox();
   $('#personForm').addEventListener('submit',async e=>{e.preventDefault();
+    const _undoSnap=p?booksSnapshot():null;
     const data={name:$('#pName').value.trim(),role:$('#pRole').value,note:$('#pNote').value.trim()};
     const docId=await persistStagedPhoto();
     if(stagedPhoto&&!docId)toast('⚠️ Photo could not be stored on this device — person still saved');
@@ -1186,9 +1304,9 @@ function openPerson(id){
     if(p){Object.assign(p,data);if(docId)registerPhotoDoc(docId,{name:'Person photo — '+data.name,type:'Other',biz:'cfp',year:curYear,linkId:p.id})}
     else{const pid=uid();DB.people.push({id:pid,...data});if(docId)registerPhotoDoc(docId,{name:'Person photo — '+data.name,type:'Other',biz:'cfp',year:curYear,linkId:pid})}
     stagedPhoto=null;
-    saveDB();closeModal();toast('✅ Saved!');renderPeople()});
+    saveDB();closeModal();if(p&&_undoSnap)toastWithUndo('✅ Saved!',_undoSnap);else toast('✅ Saved!');renderPeople()});
 }
-function delPerson(id){DB.people=DB.people.filter(x=>x.id!==id);saveDB();toast('🗑 Removed (their transactions stay in the books)');renderPeople()}
+function delPerson(id){const _snap=booksSnapshot();DB.people=DB.people.filter(x=>x.id!==id);saveDB();renderPeople();toastWithUndo('🗑 Removed (their transactions stay in the books)',_snap)}
 function logForPerson(id){
   const p=DB.people.find(x=>x.id===id);if(!p)return;
   openAdd('expense');
@@ -1257,6 +1375,7 @@ function openInvoice(id){
   const calc=()=>{let t=0;$$('#itemRows .itemrow').forEach(r=>{t+=(parseFloat(r.querySelector('.iQty').value)||0)*(parseFloat(r.querySelector('.iRate').value)||0)});$('#invTotalOut').textContent=fmt$(t)};
   window.invCalc=calc;$$('#itemRows input').forEach(i=>i.addEventListener('input',calc));calc();
   $('#invForm').addEventListener('submit',async e=>{e.preventDefault();
+    const _undoSnap=inv?booksSnapshot():null;
     const items=$$('#itemRows .itemrow').map(r=>({desc:r.querySelector('.iDesc').value.trim(),qty:parseFloat(r.querySelector('.iQty').value)||0,rate:parseFloat(r.querySelector('.iRate').value)||0})).filter(i=>i.desc||i.rate);
     const data={num:$('#iNum').value.trim(),client:$('#iClient').value.trim(),date:$('#iDate').value,due:$('#iDue').value,status:$('#iStatus').value,items,note:$('#iNote').value.trim()};
     const docId=await persistStagedPhoto();
@@ -1265,7 +1384,7 @@ function openInvoice(id){
     if(inv){Object.assign(inv,data);if(docId)registerPhotoDoc(docId,{name:'Invoice photo — '+data.num+' '+data.client,type:'Other',biz:'cfp',year:yrOf(data.date),linkId:inv.id})}
     else{const iid=uid();DB.invoices.push({id:iid,...data});if(docId)registerPhotoDoc(docId,{name:'Invoice photo — '+data.num+' '+data.client,type:'Other',biz:'cfp',year:yrOf(data.date),linkId:iid})}
     stagedPhoto=null;
-    saveDB();closeModal();toast('🧾 Invoice saved!');renderInvoices()});
+    saveDB();closeModal();if(inv&&_undoSnap)toastWithUndo('🧾 Invoice saved!',_undoSnap);else toast('🧾 Invoice saved!');renderInvoices()});
 }
 function itemRowHTML(){const d=document.createElement('div');d.innerHTML=itemRow(null);const html=d.innerHTML;setTimeout(()=>$$('#itemRows input').forEach(i=>i.addEventListener('input',window.invCalc)),30);return html}
 function markPaid(id){
@@ -1275,7 +1394,7 @@ function markPaid(id){
   DB.txns.push(t);inv.paidTxnId=t.id;saveDB();fillYears();
   toast('💰 Paid! '+fmt$(t.amount)+' posted to income.');renderInvoices();
 }
-function delInvoice(id){const inv=DB.invoices.find(x=>x.id===id);DB.invoices=DB.invoices.filter(x=>x.id!==id);saveDB();toast(inv&&inv.paidTxnId?'🗑 Invoice deleted (the posted income stays in Transactions)':'🗑 Invoice deleted');renderInvoices()}
+function delInvoice(id){const _snap=booksSnapshot();const inv=DB.invoices.find(x=>x.id===id);DB.invoices=DB.invoices.filter(x=>x.id!==id);saveDB();renderInvoices();toastWithUndo(inv&&inv.paidTxnId?'🗑 Invoice deleted (the posted income stays in Transactions)':'🗑 Invoice deleted',_snap)}
 function downloadInvoice(id){
   const inv=DB.invoices.find(x=>x.id===id);if(!inv)return;
   const rows=inv.items.map(i=>`<tr><td>${esc(i.desc)}</td><td style="text-align:right">${i.qty}</td><td style="text-align:right">${fmt$(i.rate)}</td><td style="text-align:right">${fmt$(i.qty*i.rate)}</td></tr>`).join('');
@@ -1370,6 +1489,7 @@ function openTaxPayment(id){
   </form>`);
   wirePhotoBox();
   $('#tpForm').addEventListener('submit',async e=>{e.preventDefault();
+    const _undoSnap=p?booksSnapshot():null;
     const docId=await persistStagedPhoto();
     if(stagedPhoto&&!docId)toast('⚠️ Photo could not be stored on this device — payment still saved');
     const data={date:$('#tpDate').value,amount:parseFloat($('#tpAmt').value)||0,to:$('#tpTo').value,quarter:+$('#tpQ').value};
@@ -1378,9 +1498,9 @@ function openTaxPayment(id){
     if(p){Object.assign(p,data);if(docId)registerPhotoDoc(docId,{name:'Tax payment proof — '+(data.to==='IRS'?'IRS':'Maryland')+' Q'+data.quarter+' '+data.year,type:'Other',biz:'per',year:data.year,linkId:p.id})}
     else{const pid=uid();DB.taxPayments.push({id:pid,...data});if(docId)registerPhotoDoc(docId,{name:'Tax payment proof — '+(data.to==='IRS'?'IRS':'Maryland')+' Q'+data.quarter+' '+data.year,type:'Other',biz:'per',year:data.year,linkId:pid})}
     stagedPhoto=null;
-    saveDB();fillYears();closeModal();toast(p?'✏️ Payment updated!':'💸 Payment logged!');renderTaxHQ()});
+    saveDB();fillYears();closeModal();if(p&&_undoSnap)toastWithUndo('✏️ Payment updated!',_undoSnap);else toast(p?'✏️ Payment updated!':'💸 Payment logged!');renderTaxHQ()});
 }
-function delTaxPayment(id){DB.taxPayments=DB.taxPayments.filter(p=>p.id!==id);saveDB();renderTaxHQ()}
+function delTaxPayment(id){const _snap=booksSnapshot();DB.taxPayments=DB.taxPayments.filter(p=>p.id!==id);saveDB();renderTaxHQ();toastWithUndo('🗑 Payment deleted',_snap)}
 let stagedDoc=null;
 function stageDoc(file){
   if(file.type==='application/pdf'&&file.size>1024*1024){toast('⚠️ That PDF is over 1MB — keep the original in Drive and store a photo/scan here instead.');return}
@@ -1437,7 +1557,7 @@ async function hydrateDocImages(){
     if(du)img.src=du;
   }
 }
-function delDoc(id){DB.docs=DB.docs.filter(x=>x.id!==id);saveDB();idbDel('docs',id).catch(()=>{});toast('🗑 Document deleted');renderTaxHQ()}
+async function delDoc(id){const _snap=booksSnapshot();let _file=null;try{_file=await idbGet('docs',id)}catch(e){}if(!_file){const _d=DB.docs.find(x=>x.id===id);if(_d&&_d.dataUrl)_file=_d.dataUrl}DB.docs=DB.docs.filter(x=>x.id!==id);saveDB();idbDel('docs',id).catch(()=>{});renderTaxHQ();toastWithUndo('🗑 Document deleted',_snap,async()=>{if(_file){try{await idbPut('docs',id,_file)}catch(e){}}})}
 function openDocEdit(id){
   const d=DB.docs.find(x=>x.id===id);if(!d)return;
   openModal(`<h3>✏️ Edit Document Info</h3><form id="docEditForm">
@@ -1449,8 +1569,9 @@ function openDocEdit(id){
     <div style="display:flex;gap:10px;justify-content:flex-end"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn">💾 Save Changes</button></div>
   </form>`);
   $('#docEditForm').addEventListener('submit',e=>{e.preventDefault();
+    const _undoSnap=booksSnapshot();
     d.name=$('#edName').value.trim()||d.name;d.type=$('#edType').value;d.biz=$('#edBiz').value;d.year=+$('#edYear').value||d.year;
-    saveDB();fillYears();closeModal();toast('✏️ Document updated!');renderTaxHQ()});
+    saveDB();fillYears();closeModal();toastWithUndo('✏️ Document updated!',_undoSnap);renderTaxHQ()});
 }
 </script>
 <script>
@@ -1512,6 +1633,7 @@ function openRecurring(id){
   $('#rType').addEventListener('change',syncCats);syncCats();
   if(r)$('#rCat').value=r.cat;
   $('#recForm').addEventListener('submit',async e=>{e.preventDefault();
+    const _undoSnap=r?booksSnapshot():null;
     const docId=await persistStagedPhoto();
     if(stagedPhoto&&!docId)toast('⚠️ Photo could not be stored on this device — rule still saved');
     const data={desc:$('#rDesc').value.trim(),amount:Math.abs(parseFloat($('#rAmt').value)||0),type:$('#rType').value,cat:$('#rCat').value,biz:$('#rBiz').value,method:$('#rMethod').value,freq:$('#rFreq').value,nextDate:$('#rNext').value,owner:ownerForBiz($('#rBiz').value)};
@@ -1519,10 +1641,10 @@ function openRecurring(id){
     if(r){Object.assign(r,data);if(docId)registerPhotoDoc(docId,{name:'Recurring — '+data.desc,type:'Other',biz:data.biz,year:curYear,linkId:r.id})}
     else{const rid=uid();DB.recurring.push({id:rid,...data,active:true});if(docId)registerPhotoDoc(docId,{name:'Recurring — '+data.desc,type:'Other',biz:data.biz,year:curYear,linkId:rid})}
     stagedPhoto=null;
-    saveDB();closeModal();const n=runRecurring();toast(r?'✏️ Rule updated!':(n?'🔁 Rule saved — '+n+' due entries logged!':'🔁 Rule saved!'));renderSettings();});
+    saveDB();closeModal();const n=runRecurring();if(r&&_undoSnap)toastWithUndo('✏️ Rule updated!',_undoSnap);else toast(r?'✏️ Rule updated!':(n?'🔁 Rule saved — '+n+' due entries logged!':'🔁 Rule saved!'));renderSettings();});
 }
 function toggleRecurring(id){const r=DB.recurring.find(x=>x.id===id);if(r)r.active=!r.active;saveDB();renderSettings()}
-function delRecurring(id){DB.recurring=DB.recurring.filter(x=>x.id!==id);saveDB();toast('🗑 Rule removed (past entries stay)');renderSettings()}
+function delRecurring(id){const _snap=booksSnapshot();DB.recurring=DB.recurring.filter(x=>x.id!==id);saveDB();renderSettings();toastWithUndo('🗑 Rule removed (past entries stay)',_snap)}
 /* plug the panel into Settings */
 const _renderSettingsBase=renderSettings;
 renderSettings=function(){_renderSettingsBase();$('#page-settings').insertAdjacentHTML('beforeend',recurringPanelHTML());watchReveals()};
@@ -2000,7 +2122,7 @@ async function persistStagedPhoto(){
 function registerPhotoDoc(docId,meta){
   DB.docs.push({id:docId,name:meta.name||'Photo',type:meta.type||'Receipt',biz:meta.biz||'per',year:meta.year||curYear,mime:stagedPhoto?stagedPhoto.mime:'image/webp',added:todayStr(),sizeKB:stagedPhoto?stagedPhoto.sizeKB:0,txnId:meta.txnId||'',linkId:meta.linkId||''});
 }
-window.__n8booksScan={parseReceiptText,compressImageFile,preprocessImageForOCR,lastFormDefaults,rememberFormDefaults,runReceiptOCR,applyScanToForm,handleReceiptFile,parse:parseReceiptText,photoBoxHTML,wirePhotoBox,persistStagedPhoto,registerPhotoDoc,showQuickConfirm,clearQuickConfirm,expandQuickConfirm,saveQuickConfirm,getLastScanConfidence:()=>lastScanConfidence,lowScanFields,scanFlagReason,toastWithScanAnother,openScanReceipt,retakeReceiptScan,showScanRetake,clearScanRetake};
+window.__n8booksScan={parseReceiptText,compressImageFile,preprocessImageForOCR,lastFormDefaults,rememberFormDefaults,runReceiptOCR,applyScanToForm,handleReceiptFile,parse:parseReceiptText,photoBoxHTML,wirePhotoBox,persistStagedPhoto,registerPhotoDoc,showQuickConfirm,clearQuickConfirm,expandQuickConfirm,saveQuickConfirm,getLastScanConfidence:()=>lastScanConfidence,lowScanFields,scanFlagReason,toastWithScanAnother,openScanReceipt,retakeReceiptScan,showScanRetake,clearScanRetake,booksSnapshot,restoreBooksSnapshot,toastWithUndo};
 </script>
 <script>
 'use strict';
@@ -2033,6 +2155,36 @@ const DRIVE_DEFAULT_CLIENT_ID='578121971085-9rl16gfo1iid9qcbsvdmkokdpsavnt13.app
 const DRIVE_FILE_NAME='N8Books-Backup.json';
 function drv(){DB.settings.drive=DB.settings.drive||{enabled:false,auto:true,fileId:'',lastSave:'',email:''};return DB.settings.drive}
 function driveClientId(){return (DB.settings.driveClientId||'').trim()||DRIVE_DEFAULT_CLIENT_ID}
+/* ================= BACKUP STATUS CHIP (rank 11) =================
+   A chip in the fixed top nav (visible on every screen) showing when the
+   books were last backed up to Google Drive, e.g. '☁️ Backed up 2h ago',
+   or '⚠️ Not backed up yet' when no Drive backup exists. Tapping it runs
+   a backup now (driveSaveNow) when Drive is connected; when Drive is not
+   connected yet there is nowhere to back up to, so the tap takes Nathan
+   to Settings where the one-tap Connect lives. Read-only status display
+   apart from that explicit tap — it never saves or logs anything itself.
+   The time comes from drv().lastSaveISO (written on every successful
+   Drive save from now on) with drv().lastSave (the existing locale
+   string) as the fallback for backups made before the ISO field. */
+function backupWhen(){const d=drv();const raw=d.lastSaveISO||d.lastSave||'';if(!raw)return null;const t=new Date(raw);return isNaN(t.getTime())?null:t}
+function backupRelLabel(when){
+  const ms=Date.now()-when.getTime();if(ms<0)return 'just now';
+  const min=Math.floor(ms/60000);if(min<1)return 'just now';if(min<60)return min+'m ago';
+  const hr=Math.floor(min/60);if(hr<24)return hr+'h ago';
+  const day=Math.floor(hr/24);return day+(day===1?' day ago':' days ago');
+}
+function backupStatus(){
+  const d=drv();const when=backupWhen();
+  if(!when)return {state:'never',label:'⚠️ Not backed up yet',title:'No Google Drive backup yet — tap to '+(d.enabled?'back up now':'connect Drive in Settings')};
+  const stale=(Date.now()-when.getTime())>24*60*60*1000;
+  return {state:stale?'stale':'fresh',label:(stale?'⚠️':'☁️')+' Backed up '+backupRelLabel(when),title:'Last Google Drive backup: '+(d.lastSave||when.toLocaleString())+(d.enabled?' — tap to back up now':' — Drive is disconnected; tap to reconnect in Settings')};
+}
+function renderBackupChip(){const el=document.getElementById('backupChip');if(!el)return;try{const s=backupStatus();el.textContent=s.label;el.title=s.title;el.classList.toggle('warn',s.state==='never');el.classList.toggle('stale',s.state==='stale')}catch(e){}}
+async function backupChipAction(){
+  const d=drv();
+  if(!d.enabled){toast('☁️ Connect Google Drive first — one tap in Settings');go('settings');return}
+  await driveSaveNow(true);renderBackupChip();
+}
 let _drvToken=null,_drvTokenExp=0,_drvClient=null,_drvSaveTimer=null;
 function loadGIS(){
   return new Promise((res,rej)=>{
@@ -2100,7 +2252,7 @@ async function driveSaveNow(manual){
       const r=await fetch('https://www.googleapis.com/upload/drive/v3/files/'+fid+'?uploadType=media',{method:'PATCH',headers:{'Authorization':'Bearer '+tok,'Content-Type':'application/json'},body:payload});
       if(!r.ok)throw new Error('Upload '+r.status);
     }
-    d.lastSave=new Date().toLocaleString();_saveDBBase();
+    d.lastSave=new Date().toLocaleString();d.lastSaveISO=new Date().toISOString();_saveDBBase();renderBackupChip();
     if(manual)toast('☁️ Books saved to Google Drive!');
     return true;
   }catch(e){
@@ -2124,7 +2276,7 @@ async function driveConnect(){
 function driveDisconnect(){
   const d=drv();d.enabled=false;d.email='';_drvToken=null;
   if(window.google&&google.accounts&&google.accounts.oauth2&&_drvToken)google.accounts.oauth2.revoke(_drvToken);
-  _saveDBBase();toast('Drive disconnected (the backup file stays in your Drive)');renderSettings();
+  _saveDBBase();toast('Drive disconnected (the backup file stays in your Drive)');renderBackupChip();renderSettings();
 }
 function driveLoadConfirm(){
   openModal(`<h3>☁️ Restore from Drive?</h3>
@@ -2178,6 +2330,8 @@ function drivePanelHTML2(){
 }
 const _renderSettingsV4=renderSettings;
 renderSettings=function(){_renderSettingsV4();$('#page-settings').insertAdjacentHTML('afterbegin',drivePanelHTML2());watchReveals()};
+renderBackupChip();
+setInterval(renderBackupChip,60000);
 </script>
 </body>
 </html>
