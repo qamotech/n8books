@@ -176,6 +176,16 @@ tr:hover td{background:color-mix(in srgb,var(--panel2) 55%,transparent)}
 .qcRow.low b{color:var(--gold)}
 .qcFlag{display:inline-block;margin-top:3px;font-size:12.5px;font-weight:800;color:#1a1200;background:var(--gold);border-radius:20px;padding:2px 8px;letter-spacing:.2px;white-space:normal}
 .qcNote{font-size:13.5px;color:var(--gold);font-weight:700;margin-top:10px}
+.qcField{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex:1;min-width:0}
+.qcInput{width:100%;max-width:220px;background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:8px 10px;font-size:16.5px;font-weight:700;text-align:right;outline:none;color-scheme:dark}
+.qcInput:focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(76,201,240,.18)}
+.qcRow.low .qcInput{border-color:var(--gold)}
+.qcSelect{cursor:pointer;text-align:left}
+.receiptZoomable{cursor:zoom-in}
+#receiptZoom{position:fixed;inset:0;z-index:400;background:rgba(2,4,10,.94);display:flex;align-items:center;justify-content:center;padding:14px;cursor:zoom-out}
+#receiptZoom img{max-width:96vw;max-height:84vh;object-fit:contain;border-radius:10px;background:#fff;box-shadow:var(--sh)}
+#receiptZoomClose{position:absolute;top:14px;right:14px;background:var(--panel);color:var(--txt);border:1px solid var(--acc);border-radius:24px;padding:10px 18px;font-size:15px;font-weight:800;cursor:pointer}
+#receiptZoomHint{position:absolute;left:0;right:0;bottom:16px;text-align:center;font-size:13px;color:var(--mut);padding:0 18px}
 .fieldFlag{font-size:12.5px;color:var(--gold);font-weight:800;margin-top:4px}
 #toasts{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:300;display:flex;flex-direction:column;gap:8px;align-items:center}
 .toast{background:var(--panel);border:1px solid var(--acc);color:var(--txt);padding:11px 20px;border-radius:30px;font-weight:600;box-shadow:var(--sh);animation:tin .35s cubic-bezier(.34,1.4,.64,1)}
@@ -1985,7 +1995,41 @@ function setTxnFieldsCollapsed(collapse){
 }
 function clearQuickConfirm(){const qc=$('#quickConfirm');if(qc)qc.innerHTML='';setTxnFieldsCollapsed(false)}
 function expandQuickConfirm(){clearQuickConfirm();const d=$('#fDesc');if(d)d.focus()}
+/* ---- inline quick-fix on the quick-confirm card (rank 14) ----
+   The card's Vendor/Date/Total rows were read-only text: fixing one
+   OCR typo meant tapping Edit details, expanding the full 11-field
+   form and hunting for the field. Those three rows are now inputs
+   right on the card, live-synced to the hidden form fields
+   (#fDesc/#fDate/#fAmt), so a single typo is fixed in place and
+   'Looks right — Save' saves the corrected values through the normal
+   form submit. Nothing auto-logged: syncing only pre-fills the
+   form Nathan is already reviewing; Save is still his tap. */
+/* ---- inline Category/Business dropdowns on the card (rank 15) ----
+   Rank 14 left Category/Business as read-only rows, so fixing the
+   two fields MOST often flagged low-confidence (unknown store =>
+   guessed category/business) still meant Edit details + the full
+   form. They are now <select>s on the card (#qcCat/#qcBiz, options
+   mirrored from the form's own #fCat/#fBiz), live-synced by
+   syncQuickConfirmToForm(); changing Business on the card follows
+   the form's own rule for new entries — owner follows the business
+   (an edit form, marked by its Delete button, keeps its owner).
+   Nothing auto-logged: syncing only pre-fills; Save is his tap. */
+function syncQuickConfirmToForm(){
+  const d=$('#qcDesc'),dt=$('#qcDate'),a=$('#qcAmt');
+  if(d&&$('#fDesc'))$('#fDesc').value=d.value;
+  if(dt&&$('#fDate'))$('#fDate').value=dt.value;
+  if(a&&$('#fAmt'))$('#fAmt').value=a.value;
+  const c=$('#qcCat');if(c&&$('#fCat')&&[...$('#fCat').options].some(o=>o.value===c.value))$('#fCat').value=c.value;
+  const b=$('#qcBiz');if(b&&$('#fBiz')&&[...$('#fBiz').options].some(o=>o.value===b.value))$('#fBiz').value=b.value;
+}
+function syncQuickConfirmBiz(){
+  syncQuickConfirmToForm();
+  const b=$('#qcBiz'),o=$('#fOwner');
+  const isEdit=!!document.querySelector('#txnForm .btn.danger');
+  if(b&&o&&!isEdit)o.value=ownerForBiz(b.value);
+}
 function saveQuickConfirm(){
+  syncQuickConfirmToForm();
   const missing=[];
   if(!($('#fDesc')&&$('#fDesc').value.trim()))missing.push('description');
   if(!($('#fDate')&&$('#fDate').value))missing.push('date');
@@ -2001,6 +2045,9 @@ function showQuickConfirm(){
   const amt=amtRaw?fmt$(parseFloat(amtRaw)||0):'';
   const cat=$('#fCat')?catName($('#fCat').value):'';
   const biz=$('#fBiz')?bizName($('#fBiz').value):'';
+  const catId=$('#fCat')?$('#fCat').value:'';
+  const bizId=$('#fBiz')?$('#fBiz').value:'';
+  const optsFor=(sel,cur)=>{const s=$(sel);if(!s)return '';return [...s.options].map(o=>`<option value="${esc(o.value)}" ${o.value===cur?'selected':''}>${esc(o.textContent)}</option>`).join('')};
   const conf=lastScanConfidence;
   const row=(label,val,key)=>{
     if(!val)return `<div class="qcRow"><span>${label}</span><b>⚠️ check</b></div>`;
@@ -2008,15 +2055,26 @@ function showQuickConfirm(){
     return `<div class="qcRow"><span>${label}</span><b>${esc(val)}</b></div>`;
   };
   const low=lowScanFields(conf);
+  const flagFor=(key,val)=>{
+    if(!val)return `<span class="qcFlag">⚠️ check — couldn't read this, type it here</span>`;
+    if(conf&&conf[key]==='low')return `<span class="qcFlag">⚠️ check — ${esc(scanFlagReason(key,conf))}</span>`;
+    return '';
+  };
+  const editRow=(label,inputHtml,key,val)=>`<div class="qcRow${conf&&conf[key]==='low'?' low':''}"><span>${label}</span><span class="qcField">${inputHtml}${flagFor(key,val)}</span></div>`;
   qc.innerHTML=`<div class="qcCard" id="qcCard">
-    <div class="qcHead">${stagedReceipt?`<img src="${stagedReceipt.dataUrl}" alt="receipt photo">`:''}<div><div style="font-size:17px;font-weight:800">🧾 Does this look right?</div><div style="font-size:13px;color:var(--mut)">One glance, then save — or open the full form to fix anything.</div></div></div>
-    ${row('🏪 Vendor',desc,'vendor')}${row('📅 Date',date,'date')}${row('💵 Total',amt,'total')}${row('🏷️ Category',cat,'cat')}${row('🏢 Business',biz,'biz')}
+    <div class="qcHead">${stagedReceipt?`<img src="${stagedReceipt.dataUrl}" alt="receipt photo" class="receiptZoomable" title="Tap to enlarge the receipt photo" onclick="openReceiptZoom()">`:''}<div><div style="font-size:17px;font-weight:800">🧾 Does this look right?</div><div style="font-size:13px;color:var(--mut)">One glance, then save. ✏️ Tap any row to fix it right here — no need to open the full form. 🔍 Tap the photo to enlarge it.</div></div></div>
+    ${editRow('🏪 Vendor',`<input id="qcDesc" class="qcInput" type="text" value="${esc(desc)}" placeholder="Vendor / description" autocomplete="off">`,'vendor',desc)}${editRow('📅 Date',`<input id="qcDate" class="qcInput" type="date" value="${esc(date)}">`,'date',date)}${editRow('💵 Total',`<input id="qcAmt" class="qcInput" type="number" step="0.01" min="0" value="${esc(amtRaw)}" placeholder="0.00">`,'total',amt)}${editRow('🏷️ Category',`<select id="qcCat" class="qcInput qcSelect">${optsFor('#fCat',catId)}</select>`,'cat',cat)}${editRow('🏢 Business',`<select id="qcBiz" class="qcInput qcSelect">${optsFor('#fBiz',bizId)}</select>`,'biz',biz)}
     ${low.length?`<div class="qcNote">⚠️ ${low.join(', ')} need${low.length===1?'s':''} a closer look — flagged above. Everything else read solid.</div>`:''}
     <button type="button" class="qcSave" id="qcSaveBtn">✅ Looks right — Save</button>
     <button type="button" class="qcEdit" id="qcEditBtn">✏️ Edit details</button>
+    ${stagedReceipt?`<button type="button" class="qcEdit" id="qcDiscardBtn">🗑️ Remove photo — save without it</button>`:''}
   </div>`;
+  ['#qcDesc','#qcDate','#qcAmt'].forEach(sel=>{const inp=$(sel);if(inp)inp.addEventListener('input',syncQuickConfirmToForm)});
+  const qcC=$('#qcCat');if(qcC)qcC.addEventListener('change',syncQuickConfirmToForm);
+  const qcB=$('#qcBiz');if(qcB)qcB.addEventListener('change',syncQuickConfirmBiz);
   const sv=$('#qcSaveBtn');if(sv)sv.onclick=saveQuickConfirm;
   const ed=$('#qcEditBtn');if(ed)ed.onclick=expandQuickConfirm;
+  const dc=$('#qcDiscardBtn');if(dc)dc.onclick=discardStagedReceipt;
   setTxnFieldsCollapsed(true);
 }
 /* ---- capture guidance + Retake (rank 6) ----
@@ -2036,17 +2094,54 @@ function showScanRetake(msg){
   if(msg){const s=document.createElement('span');s.style.cssText='font-size:12.5px;color:var(--mut);margin-left:8px';s.textContent=msg;r.appendChild(s)}
 }
 function retakeReceiptScan(){
-  clearQuickConfirm();clearScanRetake();
+  clearQuickConfirm();clearScanRetake();closeReceiptZoom();
   const st=$('#scanStatus');if(st)st.textContent='📷 Retake — fill the frame, good light, flatten the receipt flat.';
   const cam=$('#receiptFileCam');if(cam)cam.click();else if($('#scanBtnCam'))$('#scanBtnCam').click();
 }
+/* ---- remove staged receipt photo (rank 13) ----
+   A staged photo could not be rejected on its own: the only ways
+   out were Retake (which replaces it only if a new photo is picked)
+   or closing the whole modal and losing the form. The preview and
+   the quick-confirm card now carry a '🗑️ Remove photo' button that
+   discards ONLY the staged photo — the typed/parsed entry, its
+   confidence flags and an edit's previously attached receipt all
+   stay — and saving afterwards saves with no new photo attached.
+   View/removal only: it commits, edits and logs nothing itself,
+   and preview-before-commit is unchanged. */
+function discardStagedReceipt(){
+  if(!stagedReceipt)return;
+  stagedReceipt=null;scannedText='';
+  clearQuickConfirm();clearScanRetake();closeReceiptZoom();
+  const pv=$('#receiptPreview');if(pv)pv.innerHTML='';
+  const st=$('#scanStatus');if(st)st.innerHTML='🗑️ Photo removed — <b>Save will save the entry with no new photo attached.</b> Check the form, then tap Save — nothing is logged until you do.';
+}
+/* ---- tap-to-enlarge staged receipt photo (rank 12) ----
+   During review the staged photo was only a 140px preview (and a
+   64px cropped thumbnail on the quick-confirm card) — too small to
+   compare the parsed vendor/date/total against the receipt itself.
+   Tapping either image now opens the FULL staged photo full-screen
+   (object-fit: contain, readable) with a ✕ Close button; tapping
+   anywhere on the overlay closes it. View-only: it commits, edits
+   and logs nothing — preview-before-commit, but readable. */
+function openReceiptZoom(){
+  if(!stagedReceipt||!stagedReceipt.dataUrl)return;
+  closeReceiptZoom();
+  const z=document.createElement('div');z.id='receiptZoom';
+  const img=document.createElement('img');img.src=stagedReceipt.dataUrl;img.alt='receipt photo enlarged';
+  const b=document.createElement('button');b.type='button';b.id='receiptZoomClose';b.textContent='✕ Close';
+  const h=document.createElement('div');h.id='receiptZoomHint';h.textContent='🔍 Check the receipt against the form — tap anywhere to close. Nothing is saved yet.';
+  z.appendChild(img);z.appendChild(b);z.appendChild(h);
+  z.onclick=()=>closeReceiptZoom();
+  document.body.appendChild(z);
+}
+function closeReceiptZoom(){const z=$('#receiptZoom');if(z)z.remove()}
 async function handleReceiptFile(file){
   const st=$('#scanStatus'),pv=$('#receiptPreview');
-  clearQuickConfirm();lastScanConfidence=null;clearFieldFlags();clearScanRetake();
+  clearQuickConfirm();lastScanConfidence=null;clearFieldFlags();clearScanRetake();closeReceiptZoom();
   if(!file||!file.type||!file.type.startsWith('image/')){if(st)st.innerHTML='⚠️ That file is not a photo — pick a receipt image.';return}
   if(st)st.textContent='🗜️ Compressing photo…';
   try{stagedReceipt=await compressImageFile(file)}catch(e){if(st)st.innerHTML='⚠️ Could not read that photo file. Try again — or fill the form in by hand.';return}
-  if(pv)pv.innerHTML='<img src="'+stagedReceipt.dataUrl+'" alt="receipt preview" style="max-height:140px;border-radius:10px;border:1px solid var(--line)"><div style="font-size:12.5px;color:var(--mut);margin-top:4px">📎 This photo will attach to the transaction when you save.</div>';
+  if(pv)pv.innerHTML='<img src="'+stagedReceipt.dataUrl+'" alt="receipt preview" class="receiptZoomable" title="Tap to enlarge the receipt photo" onclick="openReceiptZoom()" style="max-height:140px;border-radius:10px;border:1px solid var(--line)"><div style="font-size:12.5px;color:var(--mut);margin-top:4px">📎 This photo will attach to the transaction when you save. 🔍 <b style="color:var(--txt)">Tap the photo to enlarge it</b> and check the details before you save.</div><button type="button" class="btn ghost small" id="scanDiscardBtn" onclick="discardStagedReceipt()" style="margin-top:6px">🗑️ Remove photo — save without it</button>';
   if(st)st.textContent='🔎 Reading receipt… (the first scan downloads the OCR reader — needs internet once)';
   try{
     const ocrUrl=await preprocessImageForOCR(stagedReceipt.dataUrl);
@@ -2122,7 +2217,7 @@ async function persistStagedPhoto(){
 function registerPhotoDoc(docId,meta){
   DB.docs.push({id:docId,name:meta.name||'Photo',type:meta.type||'Receipt',biz:meta.biz||'per',year:meta.year||curYear,mime:stagedPhoto?stagedPhoto.mime:'image/webp',added:todayStr(),sizeKB:stagedPhoto?stagedPhoto.sizeKB:0,txnId:meta.txnId||'',linkId:meta.linkId||''});
 }
-window.__n8booksScan={parseReceiptText,compressImageFile,preprocessImageForOCR,lastFormDefaults,rememberFormDefaults,runReceiptOCR,applyScanToForm,handleReceiptFile,parse:parseReceiptText,photoBoxHTML,wirePhotoBox,persistStagedPhoto,registerPhotoDoc,showQuickConfirm,clearQuickConfirm,expandQuickConfirm,saveQuickConfirm,getLastScanConfidence:()=>lastScanConfidence,lowScanFields,scanFlagReason,toastWithScanAnother,openScanReceipt,retakeReceiptScan,showScanRetake,clearScanRetake,booksSnapshot,restoreBooksSnapshot,toastWithUndo};
+window.__n8booksScan={parseReceiptText,compressImageFile,preprocessImageForOCR,lastFormDefaults,rememberFormDefaults,runReceiptOCR,applyScanToForm,handleReceiptFile,parse:parseReceiptText,photoBoxHTML,wirePhotoBox,persistStagedPhoto,registerPhotoDoc,showQuickConfirm,clearQuickConfirm,expandQuickConfirm,saveQuickConfirm,syncQuickConfirmToForm,getLastScanConfidence:()=>lastScanConfidence,lowScanFields,scanFlagReason,toastWithScanAnother,openScanReceipt,retakeReceiptScan,showScanRetake,clearScanRetake,openReceiptZoom,closeReceiptZoom,discardStagedReceipt,getStagedReceipt:()=>stagedReceipt,booksSnapshot,restoreBooksSnapshot,toastWithUndo};
 </script>
 <script>
 'use strict';
