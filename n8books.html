@@ -105,6 +105,7 @@ section.page.on{display:block}
 .card .big{font-size:32px;font-weight:800;margin-top:6px}
 .card .sub{color:var(--mut);font-size:13.5px;margin-top:4px}
 .pos{color:var(--grn)}.neg{color:var(--red)}.gold{color:var(--gold)}
+.vfilter{cursor:pointer}.vfilter:hover{color:var(--gold);text-decoration:underline}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--rad);padding:22px;box-shadow:var(--sh);margin:18px 0}
 .panel h2{font-size:20px;margin-bottom:6px}
 .panel .hint{color:var(--mut);font-size:14px;margin-bottom:14px}
@@ -566,7 +567,7 @@ function renderDash(){
   </div>
   <div class="panel reveal"><h2>🕐 Recent Activity</h2>
     ${recent.length?`<div class="twrap"><table><tr><th>Date</th><th>Description</th><th>Category</th><th>Business</th><th style="text-align:right">Amount</th><th></th></tr>
-    ${recent.map(t=>`<tr><td>${t.date}</td><td>${esc(t.desc)}</td><td><span class="chip">${catName(t.cat)}</span></td><td>${bizName(t.biz)}</td><td class="amt ${t.type==='income'?'pos':'neg'}">${t.type==='income'?'+':'-'}${fmt$(t.amount)}</td><td style="white-space:nowrap">${t.docId?`<button class="iconbtn" title="View attached receipt" onclick="viewDoc('${t.docId}')">📎</button> `:''}<button class="iconbtn" title="Edit this entry" onclick="openEdit('${t.id}')">✏️</button></td></tr>`).join('')}</table></div>`:'<p class="empty">Nothing yet — add your first transaction or import a bank file. 🚀</p>'}
+    ${recent.map(t=>`<tr><td>${t.date}</td><td>${esc(t.desc)}</td><td><span class="chip">${catName(t.cat)}</span></td><td>${bizName(t.biz)}</td><td class="amt ${t.type==='income'?'pos':'neg'}">${t.type==='income'?'+':'-'}${fmt$(t.amount)}</td><td style="white-space:nowrap">${t.docId?`<button class="iconbtn" title="View attached receipt" onclick="viewDoc('${t.docId}')">📎</button> `:''}<button class="iconbtn" title="Clone this entry" onclick="cloneTxn('${t.id}')">⧉</button> <button class="iconbtn" title="Edit this entry" onclick="openEdit('${t.id}')">✏️</button></td></tr>`).join('')}</table></div>`:'<p class="empty">Nothing yet — add your first transaction or import a bank file. 🚀</p>'}
   </div>`;
   $$('#page-dash [data-count]').forEach(el=>countUp(el,+el.dataset.count));
   drawFlowChart($('#chFlow'),tx);drawDonut($('#chDonut'),top,T.exp);
@@ -705,6 +706,7 @@ function openScanReceipt(){const fm=$('#fabMenu');if(fm)fm.classList.remove('ope
 function openEdit(id){const t=DB.txns.find(x=>x.id===id);if(!t)return;formType=t.type;const group=t.splitId?DB.txns.filter(x=>x.splitId===t.splitId):null;openModal(txnForm(t,null,group));wireTxnForm(t,group)}
 function wireTxnForm(t,group){
   stagedReceipt=null;
+  let dupKeySeen='';
   const _cam=$('#receiptFileCam'),_gal=$('#receiptFileGal');
   if($('#scanBtnCam'))$('#scanBtnCam').onclick=()=>_cam&&_cam.click();
   if($('#scanBtnGal'))$('#scanBtnGal').onclick=()=>_gal&&_gal.click();
@@ -755,9 +757,17 @@ function wireTxnForm(t,group){
       if(newDocId)registerReceiptDoc(newDocId,firstId,base.desc,rows[0].biz,base.date);
       const wasScanSplit=!!newDocId||!!stagedReceipt;
       stagedReceipt=null;
+      if(wasScanSplit)learnVendorRule(base.desc,rows[0].cat,rows[0].biz,rows[0].owner);
       rememberFormDefaults(rows[0]&&rows[0].biz,base.method);
       saveDB();fillYears();closeModal();if(wasScanSplit&&!t&&!(group&&group.length))toastWithScanAnother('✂️ Split saved — '+rows.length+' lines!');else if(_undoSnap)toastWithUndo('✂️ Split saved — '+rows.length+' lines!',_undoSnap);else toast('✂️ Split saved — '+rows.length+' lines!');render(currentPage());return;
     }
+    /* duplicate guard: same vendor + date + amount + type already on
+       the books -> warn once; tapping Save again saves anyway. Runs
+       before the receipt photo persists, so a blocked save stores
+       nothing. */
+    const dupKey=[base.date,base.desc.toLowerCase(),amt,formType].join('|');
+    const dup=DB.txns.find(x=>x.id!==(t?t.id:'')&&x.date===base.date&&x.type===formType&&Math.abs(x.amount-amt)<0.005&&x.desc.trim().toLowerCase()===base.desc.trim().toLowerCase());
+    if(dup&&dupKeySeen!==dupKey){dupKeySeen=dupKey;toast('⚠️ Looks like a duplicate — same vendor, date & amount is already saved. Tap Save again to save it anyway.');return}
     await persistReceipt();
     const data={...base,amount:amt,cat:$('#fCat').value,biz:$('#fBiz').value,note:$('#fNote').value.trim(),owner:$('#fOwner').value};
     if(newDocId)data.docId=newDocId;
@@ -766,20 +776,25 @@ function wireTxnForm(t,group){
     if(newDocId)registerReceiptDoc(newDocId,savedId,data.desc,data.biz,data.date);
     const wasScan=!!newDocId||!!stagedReceipt;
     stagedReceipt=null;
+    if(wasScan)learnVendorRule(data.desc,data.cat,data.biz,data.owner);
     rememberFormDefaults(data.biz,data.method);
     saveDB();fillYears();closeModal();if(wasScan&&!t)toastWithScanAnother('✅ Added!');else if(t&&_undoSnap)toastWithUndo('💾 Saved!',_undoSnap);else toast(t?'💾 Saved!':'✅ Added!');render(currentPage());
   });
 }
 function delTxn(id){const _snap=booksSnapshot();const t=DB.txns.find(x=>x.id===id);const _msg=(t&&t.splitId)?'🗑 Whole split deleted':'🗑 Deleted';if(t&&t.splitId){DB.txns=DB.txns.filter(x=>x.splitId!==t.splitId)}else{DB.txns=DB.txns.filter(x=>x.id!==id)}saveDB();closeModal();render(currentPage());toastWithUndo(_msg,_snap)}
+/* ---- clone entry: repeat purchases (crew pay, supplies runs) start
+   from the last one instead of a blank form. Date resets to today;
+   everything else carries over for review — Save is still his tap. ---- */
+function cloneTxn(id){const t=DB.txns.find(x=>x.id===id);if(!t)return;openAdd(t.type);$('#fDesc').value=t.desc;$('#fAmt').value=Math.abs(t.amount);$('#fDate').value=todayStr();const c=$('#fCat');if(c&&[...c.options].some(o=>o.value===t.cat))c.value=t.cat;$('#fBiz').value=t.biz;$('#fOwner').value=t.owner||ownerForBiz(t.biz);const mEl=$('#fMethod');if(mEl&&[...mEl.options].some(o=>o.value===t.method))mEl.value=t.method;const n=$('#fNote');if(n)n.value=t.note||'';toast('⧉ Cloned — check the date, then Save')}
 function currentPage(){const b=$$('#navlinks button').find(x=>x.classList.contains('on'));return b?b.dataset.page:'dash'}
 
 /* ================= TRANSACTIONS PAGE ================= */
-let txFilter={q:'',biz:'all',cat:'all',type:'all',owner:'all',sort:'date',dir:-1,page:0};
+let txFilter={q:'',biz:'all',cat:'all',type:'all',owner:'all',band:'all',sort:'date',dir:-1,page:0};
 function renderTxns(){
   /* Searching looks across ALL years — a mis-dated entry lands in the wrong
      year, and you still need to be able to find it to fix it. */
   const all=txFilter.q?DB.txns:yearTxns();
-  let list=all.filter(t=>(txFilter.biz==='all'||t.biz===txFilter.biz)&&(txFilter.cat==='all'||t.cat===txFilter.cat)&&(txFilter.type==='all'||t.type===txFilter.type)&&(txFilter.owner==='all'||(t.owner||'joint')===txFilter.owner)&&(!txFilter.q||(t.desc+' '+t.note+' '+catName(t.cat)).toLowerCase().includes(txFilter.q)));
+  let list=all.filter(t=>(txFilter.biz==='all'||t.biz===txFilter.biz)&&(txFilter.cat==='all'||t.cat===txFilter.cat)&&(txFilter.type==='all'||t.type===txFilter.type)&&(txFilter.owner==='all'||(t.owner||'joint')===txFilter.owner)&&(!txFilter.band||txFilter.band==='all'||(txFilter.band==='u25'?Math.abs(t.amount)<25:txFilter.band==='m'?Math.abs(t.amount)>=25&&Math.abs(t.amount)<=100:Math.abs(t.amount)>100))&&(!txFilter.q||(t.desc+' '+t.note+' '+catName(t.cat)).toLowerCase().includes(txFilter.q)));
   list.sort((a,b)=>{const k=txFilter.sort;let r=k==='amount'?a.amount-b.amount:a[k].localeCompare(b[k]);return r*txFilter.dir});
   const PER=15,pages=Math.max(1,Math.ceil(list.length/PER));txFilter.page=Math.min(txFilter.page,pages-1);
   const page=list.slice(txFilter.page*PER,txFilter.page*PER+PER);
@@ -794,12 +809,13 @@ function renderTxns(){
       <div class="fld"><label>Owner</label><select id="txOwner"><option value="all">Everyone</option>${OWNERS.map(o=>`<option value="${o[0]}" ${txFilter.owner===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></div>
       <div class="fld" style="flex:0"><label>&nbsp;</label><button class="btn" onclick="openAdd()">➕ Add</button></div>
     </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 10px;align-items:center"><span style="color:var(--mut);font-size:12.5px">Amount:</span>${[['all','All'],['u25','Under $25'],['m','$25–$100'],['o100','Over $100']].map(([k,l])=>`<button class="btn ${txFilter.band===k?'':'ghost '}small" onclick="setBand('${k}')">${l}</button>`).join('')}<span style="color:var(--mut);font-size:12.5px">· tap a vendor name to see only that vendor</span></div>
     ${page.length?`<div class="twrap"><table><tr>
       ${[['date','Date'],['desc','Description'],['cat','Category'],['biz','Business'],['method','Method'],['amount','Amount']].map(([k,l])=>`<th onclick="sortTx('${k}')">${l}${txFilter.sort===k?(txFilter.dir===1?' ↑':' ↓'):''}</th>`).join('')}<th></th></tr>
-      ${page.map(t=>`<tr><td style="white-space:nowrap">${t.date}</td><td>${esc(t.desc)}${t.note?`<div style="color:var(--mut);font-size:12px">${esc(t.note)}</div>`:''}</td>
+      ${page.map(t=>`<tr><td style="white-space:nowrap">${t.date}</td><td><span class="vfilter" title="Show only this vendor" onclick="filterVendor('${t.id}')">${esc(t.desc)}</span>${t.note?`<div style="color:var(--mut);font-size:12px">${esc(t.note)}</div>`:''}</td>
       <td><span class="chip">${catName(t.cat)}</span>${t.splitId?' <span class="chip" title="Part of a split transaction">✂️ split</span>':''}</td><td><span class="chip ${(BIZ.find(b=>b.id===t.biz)||{}).cls||''}">${bizName(t.biz)}</span> <span class="chip">${ownerName(t.owner)}</span></td>
       <td>${esc(t.method||'')}</td><td class="amt ${t.type==='income'?'pos':'neg'}">${t.type==='income'?'+':'-'}${fmt$(t.amount)}</td>
-      <td style="white-space:nowrap">${t.docId?`<button class="iconbtn" title="View attached receipt" onclick="viewDoc('${t.docId}')">📎</button> `:''}<button class="iconbtn" onclick="openEdit('${t.id}')">✏️</button></td></tr>`).join('')}
+      <td style="white-space:nowrap">${t.docId?`<button class="iconbtn" title="View attached receipt" onclick="viewDoc('${t.docId}')">📎</button> `:''}<button class="iconbtn" title="Clone this entry" onclick="cloneTxn('${t.id}')">⧉</button> <button class="iconbtn" onclick="openEdit('${t.id}')">✏️</button></td></tr>`).join('')}
     </table></div>
     <div class="pager"><button class="btn ghost small" ${txFilter.page===0?'disabled':''} onclick="txPage(-1)">← Prev</button> Page ${txFilter.page+1} of ${pages} <button class="btn ghost small" ${txFilter.page>=pages-1?'disabled':''} onclick="txPage(1)">Next →</button></div>`
     :'<p class="empty">No transactions match. Try clearing filters — or import a bank file to fill this up. 📥</p>'}
@@ -812,6 +828,8 @@ function renderTxns(){
 }
 function renderTxnsSoft(){const keep=document.activeElement;renderTxns();const q=$('#txQ');if(q){q.focus();q.setSelectionRange(q.value.length,q.value.length)}}
 function sortTx(k){if(txFilter.sort===k)txFilter.dir*=-1;else{txFilter.sort=k;txFilter.dir=1}renderTxns()}
+function setBand(k){txFilter.band=k;txFilter.page=0;renderTxns()}
+function filterVendor(id){const t=DB.txns.find(x=>x.id===id);if(!t)return;txFilter.q=t.desc.toLowerCase();txFilter.page=0;renderTxns()}
 function txPage(d){txFilter.page+=d;renderTxns()}
 </script>
 <script>
@@ -988,17 +1006,22 @@ function openMileage(id){
   openModal(`<h3>${m?'✏️ Edit Trip':'🚗 Log a Trip'}</h3><form id="mileForm">
     <div class="frow"><div class="fld"><label>Date</label><input type="date" id="mDate" required value="${m?m.date:todayStr()}"></div>
     <div class="fld"><label>Miles</label><input type="number" id="mMiles" step="0.1" min="0" required placeholder="e.g. 42" value="${m?m.miles:''}"></div></div>
+    <div class="fld" style="margin:0 0 8px"><label style="display:flex;gap:8px;align-items:center;cursor:pointer;font-size:14px"><input type="checkbox" id="mRound" style="width:18px;height:18px;accent-color:var(--acc)"> ⇄ Round trip — double the miles</label></div>
     <div class="frow"><div class="fld" style="flex:2"><label>Purpose / Route</label><input id="mPurpose" required placeholder="e.g. Home → Home Depot → tile job (Erika)" value="${m?esc(m.purpose):''}"></div>
     <div class="fld"><label>Business</label><select id="mBiz">${BIZ.map(b=>`<option value="${b.id}" ${m&&m.biz===b.id?'selected':''}>${b.e} ${b.n}</option>`).join('')}</select></div></div>
     ${photoBoxHTML(m?m.docId:null,'Snap the odometer, a gas receipt, the job site — it saves to the Vault with this trip.')}
     <div style="display:flex;gap:10px;justify-content:flex-end"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn">${m?'💾 Save Changes':'💾 Save Trip'}</button></div>
   </form>`);
   wirePhotoBox();
+  /* round trip: toggling doubles/halves the miles right in the box,
+     so the number he sees is always the number that saves. */
+  const _rt=$('#mRound');if(_rt)_rt.addEventListener('change',()=>{const mi=$('#mMiles');const v=parseFloat(mi.value)||0;if(v>0)mi.value=(_rt.checked?v*2:v/2).toFixed(1)});
   $('#mileForm').addEventListener('submit',async e=>{e.preventDefault();
     const _undoSnap=m?booksSnapshot():null;
     const docId=await persistStagedPhoto();
     if(stagedPhoto&&!docId)toast('⚠️ Photo could not be stored on this device — trip still saved');
-    const data={date:$('#mDate').value,miles:parseFloat($('#mMiles').value)||0,purpose:$('#mPurpose').value.trim(),biz:$('#mBiz').value};
+    let _purp=$('#mPurpose').value.trim();if($('#mRound')&&$('#mRound').checked&&!_purp.includes('(round trip)'))_purp+=' (round trip)';
+    const data={date:$('#mDate').value,miles:parseFloat($('#mMiles').value)||0,purpose:_purp,biz:$('#mBiz').value};
     if(docId)data.docId=docId;
     if(m){Object.assign(m,data);if(docId)registerPhotoDoc(docId,{name:'Trip photo — '+data.purpose,type:'Receipt',biz:data.biz,year:yrOf(data.date),linkId:m.id})}
     else{const mid=uid();DB.mileage.push({id:mid,...data});if(docId)registerPhotoDoc(docId,{name:'Trip photo — '+data.purpose,type:'Receipt',biz:data.biz,year:yrOf(data.date),linkId:mid})}
@@ -1082,16 +1105,120 @@ function renderReports(){
     <div class="panel reveal in"><h2>🗂️ Category Ledger</h2>
       ${Object.entries(byCat).sort((a,b)=>(b[1].inc+b[1].exp)-(a[1].inc+a[1].exp)).map(([k,v])=>`<div class="kv"><span>${k}</span><span>${v.inc?`<b class="pos">+${fmt$(v.inc)}</b> `:''}${v.exp?`<b class="neg">-${fmt$(v.exp)}</b>`:''}</span></div>`).join('')||'<p class="empty">No data yet.</p>'}
     </div>
-  </div>`;
+  </div>
+  <div class="panel reveal in"><h2>🧰 Job Profit by Person — ${curYear}</h2>${jobProfitHTML()}</div>
+  <div class="panel reveal in"><h2>🧳 Trip Pack</h2>${tripPackHTML()}</div>`;
   watchReveals();
 }
 function monthJump(i){
-  txFilter={q:'',biz:'all',cat:'all',type:'all',owner:'all',sort:'date',dir:-1,page:0};
+  txFilter={q:'',biz:'all',cat:'all',type:'all',owner:'all',band:'all',sort:'date',dir:-1,page:0};
   go('txns');
   const mk=curYear+'-'+String(i+1).padStart(2,'0');
   // soft-filter by re-render with a month query hack: set search to the month prefix via date filter
   const all=yearTxns().filter(t=>t.date.startsWith(mk));
   toast(`📅 ${all.length} transactions in that month — full year shown, newest first`);
+}
+
+/* ================= EXTRA TOOLS (Oct 30 batch) =================
+   Four tools tailored to how Nathan actually works: a one-tap
+   preparer pack for Michelle / KatzAbosch, a 1099-NEC roll-up for
+   the Clark Family Projects crew, per-person job profit, and a
+   date-range Trip Pack for LTD conference weekends (his standing
+   rule: conference-window food is business). */
+function dlCSV(name,rows){
+  const csv=rows.map(r=>r.map(c=>'"'+String(c==null?'':c).replace(/"/g,'""')+'"').join(',')).join('\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+}
+/* --- Tool 1: Preparer Tax Pack (Tax HQ buttons) --- */
+function taxPackCSV(kind){
+  const tx=yearTxns();
+  if(kind==='summary'){
+    const rows=[['Business','Category','Schedule C Line','Income','Expenses']];
+    BIZ.forEach(b=>{const bt=tx.filter(t=>t.biz===b.id);const cats={};
+      bt.forEach(t=>{cats[t.cat]=cats[t.cat]||{inc:0,exp:0};cats[t.cat][t.type==='income'?'inc':'exp']+=t.amount});
+      Object.entries(cats).forEach(([c,v])=>rows.push([b.n,catName(c),catLine(c),v.inc.toFixed(2),v.exp.toFixed(2)]))});
+    const miles=yearMiles().reduce((a,m)=>a+m.miles,0);
+    rows.push([],['Mileage total (mi)',miles.toFixed(1)],['Mileage rate',(MILEAGE_RATES[curYear]||0.7)],['Mileage deduction',(miles*(MILEAGE_RATES[curYear]||0.7)).toFixed(2)]);
+    dlCSV('N8Books-TaxPack-'+curYear+'-summary.csv',rows);
+  }else if(kind==='txns'){
+    const rows=[['Date','Description','Type','Category','Schedule C Line','Business','Method','Amount','Note']];
+    [...tx].sort((a,b)=>a.date.localeCompare(b.date)).forEach(t=>rows.push([t.date,t.desc,t.type,catName(t.cat),catLine(t.cat),bizName(t.biz),t.method||'',(t.type==='income'?t.amount:-t.amount).toFixed(2),t.note||'']));
+    dlCSV('N8Books-TaxPack-'+curYear+'-transactions.csv',rows);
+  }else{
+    const rows=[['Date','Miles','Purpose','Business']];
+    yearMiles().forEach(m=>rows.push([m.date,m.miles,m.purpose,bizName(m.biz)]));
+    dlCSV('N8Books-TaxPack-'+curYear+'-mileage.csv',rows);
+  }
+  toast('📦 Tax pack file downloaded');
+}
+/* --- Tool 2: 1099-NEC roll-up (Tax HQ panel) --- */
+function necRollupHTML(){
+  const crew=DB.people.filter(p=>p.role==='crew'||p.role==='contractor');
+  if(!crew.length)return '<p class="empty">No crew or contractors on the People page yet.</p>';
+  const rows=crew.map(p=>{const txs=personYearTxns(p);return {p,total:txs.reduce((a,t)=>a+t.amount,0),n:txs.length}}).sort((a,b)=>b.total-a.total);
+  const grand=rows.reduce((a,r)=>a+r.total,0);
+  return `<p class="hint">Everyone you paid for labor in ${curYear}, in one place. Anyone at <b>$600+</b> needs a 1099-NEC by Jan 31 — the People page flags them too.</p>
+  <div class="twrap"><table><tr><th>Person</th><th>Payments</th><th style="text-align:right">Paid ${curYear}</th><th>1099-NEC</th></tr>
+  ${rows.map(r=>`<tr><td>${esc(r.p.name)}</td><td>${r.n}</td><td class="amt">${fmt$(r.total)}</td><td>${r.total>=600?'<span class="chip" style="border-color:var(--gold);color:var(--gold)">⚠️ Due Jan 31</span>':'<span class="chip">under $600</span>'}</td></tr>`).join('')}
+  <tr><td><b>Total crew pay</b></td><td></td><td class="amt"><b>${fmt$(grand)}</b></td><td></td></tr></table></div>`;
+}
+/* --- Tool 3: Job Profit by Person (Reports panel) --- */
+let jobPersonId='';
+function personNamedTxns(p,yr){const nm=p.name.toLowerCase();return DB.txns.filter(t=>yrOf(t.date)===yr&&(t.desc+' '+(t.note||'')).toLowerCase().includes(nm))}
+function jobProfitHTML(){
+  if(!DB.people.length)return '<p class="empty">Add people on the People page first.</p>';
+  const withActivity=DB.people.map(p=>({p,txs:personNamedTxns(p,curYear)})).filter(x=>x.txs.length);
+  const sel=DB.people.find(p=>p.id===jobPersonId)||(withActivity[0]&&withActivity[0].p)||DB.people[0];
+  const txs=personNamedTxns(sel,curYear);
+  const inc=txs.filter(t=>t.type==='income').reduce((a,t)=>a+t.amount,0);
+  const exp=txs.filter(t=>t.type==='expense').reduce((a,t)=>a+t.amount,0);
+  const net=inc-exp;
+  return `<p class="hint">Money in vs money out for one person in ${curYear} — matched by their name in entry descriptions, same as the People page. See what a job or a crew member really netted.</p>
+  <div class="fld" style="max-width:340px"><label>Person</label><select onchange="jobPersonId=this.value;renderReports()">${DB.people.map(p=>`<option value="${p.id}" ${p.id===sel.id?'selected':''}>${esc(p.name)} (${roleName(p.role)})</option>`).join('')}</select></div>
+  <div class="cards" style="margin-top:10px">
+    <div class="card"><div class="lab">Money In</div><div class="big pos">${fmt$(inc)}</div></div>
+    <div class="card"><div class="lab">Money Out</div><div class="big neg">${fmt$(exp)}</div></div>
+    <div class="card"><div class="lab">Net</div><div class="big ${net>=0?'pos':'neg'}">${fmt$(net)}</div><div class="sub">${txs.length} entries matched</div></div>
+  </div>`;
+}
+/* --- Tool 4: Trip Pack (Reports panel) --- */
+let tripPack=null;
+function buildTripPack(){
+  const f=$('#tpFrom').value,t=$('#tpTo').value,b=$('#tpBiz').value;
+  if(!f||!t){toast('Pick a start and end date');return}
+  const tx=DB.txns.filter(x=>x.date>=f&&x.date<=t&&(b==='all'||x.biz===b));
+  const byCat={};let inc=0,exp=0;
+  tx.forEach(x=>{byCat[x.cat]=(byCat[x.cat]||0)+(x.type==='income'?x.amount:-x.amount);if(x.type==='income')inc+=x.amount;else exp+=x.amount});
+  const miles=DB.mileage.filter(m=>m.date>=f&&m.date<=t&&(b==='all'||m.biz===b));
+  const mi=miles.reduce((a,m)=>a+m.miles,0),rate=MILEAGE_RATES[curYear]||0.7;
+  tripPack={f,t,b,tx,byCat,inc,exp,mi,ded:mi*rate};
+  renderReports();
+}
+function tripPackCSV(){if(!tripPack)return;const rows=[['Date','Description','Type','Category','Business','Amount']];[...tripPack.tx].sort((a,b)=>a.date.localeCompare(b.date)).forEach(x=>rows.push([x.date,x.desc,x.type,catName(x.cat),bizName(x.biz),(x.type==='income'?x.amount:-x.amount).toFixed(2)]));dlCSV('N8Books-TripPack-'+tripPack.f+'-to-'+tripPack.t+'.csv',rows)}
+function tripPackHTML(){
+  const tp=tripPack;
+  return `<p class="hint">Bundle any date range — an LTD conference weekend, a big job, a trip — into one expense summary. Conference weekends are all business, so this is your Summit write-off sheet.</p>
+  <div class="frow">
+    <div class="fld"><label>From</label><input type="date" id="tpFrom" value="${tp?tp.f:''}"></div>
+    <div class="fld"><label>To</label><input type="date" id="tpTo" value="${tp?tp.t:''}"></div>
+    <div class="fld"><label>Business</label><select id="tpBiz"><option value="all">All businesses</option>${BIZ.map(b=>`<option value="${b.id}" ${tp&&tp.b===b.id?'selected':''}>${b.e} ${b.n}</option>`).join('')}</select></div>
+    <div class="fld" style="flex:0"><label>&nbsp;</label><button class="btn" onclick="buildTripPack()">🧳 Build Pack</button></div>
+  </div>
+  ${tp?`<div class="kv"><span>Entries in range</span><b>${tp.tx.length}</b></div>
+  <div class="kv"><span>Income</span><b class="pos">${fmt$(tp.inc)}</b></div>
+  <div class="kv"><span>Expenses</span><b class="neg">${fmt$(tp.exp)}</b></div>
+  ${Object.entries(tp.byCat).sort((a,b)=>Math.abs(b[1])-Math.abs(a[1])).map(([c,v])=>`<div class="kv"><span>${catName(c)}</span><b class="${v>=0?'pos':'neg'}">${v>=0?'+':'−'}${fmt$(Math.abs(v))}</b></div>`).join('')}
+  <div class="kv"><span>Mileage in range</span><b>${fmtN(tp.mi)} mi ≈ ${fmt$(tp.ded)} deduction</b></div>
+  <button class="btn ghost small" style="margin-top:10px" onclick="tripPackCSV()">⬇️ Download pack CSV</button>`:'<p class="empty">Pick the conference dates (Fri–Sun) and hit Build Pack.</p>'}`;
+}
+
+/* --- Vault storage meter (Tax HQ): total size of stored document
+   files, so a near-full device is never a surprise mid-scan. --- */
+async function fillVaultMeter(){
+  const el=$('#vaultMeter');if(!el)return;
+  let bytes=0,n=0;
+  for(const d of DB.docs){try{const du=await idbGet('docs',d.id);if(du){bytes+=Math.round(du.length*0.75);n++}else if(d.dataUrl){bytes+=Math.round(d.dataUrl.length*0.75);n++}}catch(e){}}
+  el.textContent=n+' files · '+(bytes>1048576?(bytes/1048576).toFixed(1)+' MB':Math.max(1,Math.round(bytes/1024))+' KB');
 }
 
 /* ================= SETTINGS ================= */
@@ -1333,6 +1460,17 @@ function nextInvNum(){
   const y=curYear;const n=DB.invoices.filter(i=>i.num&&i.num.includes('-'+y+'-')).length+1;
   return 'INV-'+y+'-'+String(n).padStart(3,'0');
 }
+/* ---- unpaid-invoice aging: a Sent invoice past its due date gets a
+   visible ⏳ badge (gold to 30 days, red past that) so money owed
+   never quietly goes stale. Drafts and Paid invoices don't age. ---- */
+function invAging(i){
+  if(i.status!=='Sent')return '';
+  const due=i.due||i.date;
+  const days=Math.round((new Date(todayStr()+'T12:00:00')-new Date(due+'T12:00:00'))/86400000);
+  if(days>0)return ` <span class="chip" style="border-color:${days>30?'var(--red)':'var(--gold)'};color:${days>30?'var(--red)':'var(--gold)'}">⏳ ${days}d overdue</span>`;
+  if(days===0)return ' <span class="chip" style="border-color:var(--gold);color:var(--gold)">⏳ due today</span>';
+  return '';
+}
 function renderInvoices(){
   const list=[...DB.invoices].sort((a,b)=>b.date.localeCompare(a.date));
   const yr=list.filter(i=>yrOf(i.date)===curYear);
@@ -1349,7 +1487,7 @@ function renderInvoices(){
     <button class="btn" onclick="openInvoice()">➕ New Invoice / Estimate</button>
     ${yr.length?`<div class="twrap" style="margin-top:14px"><table><tr><th>#</th><th>Date</th><th>Client</th><th>Status</th><th style="text-align:right">Total</th><th></th></tr>
     ${yr.map(i=>`<tr><td>${esc(i.num)}</td><td>${i.date}</td><td>${esc(i.client)}</td>
-      <td><span class="chip" style="${i.status==='Paid'?'border-color:var(--grn);color:var(--grn)':i.status==='Sent'?'border-color:var(--gold);color:var(--gold)':''}">${i.status}</span></td>
+      <td><span class="chip" style="${i.status==='Paid'?'border-color:var(--grn);color:var(--grn)':i.status==='Sent'?'border-color:var(--gold);color:var(--gold)':''}">${i.status}</span>${invAging(i)}</td>
       <td class="amt">${fmt$(invTotal(i))}</td>
       <td style="white-space:nowrap">${i.docId?`<button class="iconbtn" title="View attached photo" onclick="viewDoc('${i.docId}')">📎</button> `:''}<button class="iconbtn" title="Edit" onclick="openInvoice('${i.id}')">✏️</button>
       ${i.status!=='Paid'?`<button class="iconbtn" title="Mark paid & post income" onclick="markPaid('${i.id}')">💰</button>`:''}
@@ -1460,8 +1598,14 @@ function renderTaxHQ(){
     ${pays.length?`<div class="twrap" style="margin-top:14px"><table><tr><th>Date</th><th>Paid To</th><th>Quarter</th><th style="text-align:right">Amount</th><th></th></tr>
     ${pays.sort((a,b)=>b.date.localeCompare(a.date)).map(p=>`<tr><td>${p.date}</td><td>${p.to==='IRS'?'🇺🇸 IRS (federal)':'🦀 Maryland'}</td><td>Q${p.quarter}</td><td class="amt">${fmt$(p.amount)}</td><td style="white-space:nowrap"><button class="iconbtn" title="Edit this payment" onclick="openTaxPayment('${p.id}')">✏️</button> ${p.docId?`<button class="iconbtn" title="View attached photo" onclick="viewDoc('${p.docId}')">📎</button> `:''}<button class="iconbtn" onclick="delTaxPayment('${p.id}')">🗑</button></td></tr>`).join('')}</table></div>`:''}
   </div>
+  <div class="panel reveal in"><h2>📑 1099-NEC Roll-Up — ${curYear}</h2>${necRollupHTML()}</div>
+  <div class="panel reveal in"><h2>📦 Preparer Tax Pack — ${curYear}</h2>
+    <p class="hint">Everything Michelle needs for the ${curYear} return, as three clean files: a Schedule C summary, every transaction, and the mileage log.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn small" onclick="taxPackCSV('summary')">⬇️ Summary by Business × Category</button><button class="btn small" onclick="taxPackCSV('txns')">⬇️ All Transactions</button><button class="btn small" onclick="taxPackCSV('miles')">⬇️ Mileage Log</button></div>
+  </div>
   <div class="panel reveal in"><h2>📄 Document Vault — ${curYear}</h2>
     <p class="hint">W-2s, 1099s, receipts, contracts — stored in this browser's <b>IndexedDB</b> (way beyond the old 5MB localStorage cap), tagged by year and business. Photos are compressed to WebP. Note: document files live on this device and don't travel with JSON backups — keep originals of big items in Drive too. Vault holds ${DB.docs.length} documents (${Object.entries(byType).map(([k,v])=>k+': '+v).join(' · ')||'none this year'}).</p>
+    <div class="kv" style="margin-top:8px"><span>🗄️ Storage on this device</span><b id="vaultMeter">measuring…</b></div>
     <div class="drop" id="docDrop"><div class="big">🗂️</div><b>Drop a document</b> or click to browse<br><span style="font-size:13px">Photos of receipts, W-2 / 1099 scans, PDFs under 1MB</span>
     <input type="file" id="docFile" accept="image/*,.pdf" hidden></div>
     <div id="docMeta"></div>
@@ -1485,6 +1629,7 @@ function renderTaxHQ(){
   dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('over');if(e.dataTransfer.files[0])stageDoc(e.dataTransfer.files[0])});
   fi.addEventListener('change',()=>{if(fi.files[0])stageDoc(fi.files[0])});
   hydrateDocImages();
+  fillVaultMeter();
   watchReveals();
 }
 function openTaxPayment(id){
@@ -1907,6 +2052,15 @@ function parseReceiptText(text){
     lines.forEach(L=>{if(/change|tendered|you saved|savings/i.test(L))return;all.push(...amountsIn(L))});
     if(all.length){total=Math.max(...all);totalSource='largest-amount'}
   }
+  /* ---- math cross-check: when a receipt shows SUBTOTAL and TAX,
+     they should add up to the TOTAL. A mismatch means one of the
+     three numbers was misread — flag the total for a human look. ---- */
+  let subTotal=null,taxAmt=null;
+  for(const L of lines){
+    if(subTotal==null){const m=L.match(/sub\s*-?\s*total[^0-9]*([0-9][0-9,]*\.\d{2})/i);if(m)subTotal=parseFloat(m[1].replace(/,/g,''))}
+    if(taxAmt==null){const m=L.match(/^(?:sales\s*)?tax\b[^0-9]*([0-9][0-9,]*\.\d{2})/i);if(m)taxAmt=parseFloat(m[1].replace(/,/g,''))}
+  }
+  const mathBad=(subTotal!=null&&taxAmt!=null&&total!=null&&totalSource==='total-line')?Math.abs(subTotal+taxAmt-total)>0.02:false;
   /* ---- per-field confidence (rank 4): 'high' = read straight from a
      labelled line; 'low' = guessed/fallback, so review eyes go there.
      Vendor is solid only when it is the clean top line of the receipt;
@@ -1915,16 +2069,24 @@ function parseReceiptText(text){
   const confidence={
     vendor:vendor?((vendorIdx===0&&!vendorCleaned)?'high':'low'):null,
     date:date?dateConf:null,
-    total:total!=null?(totalSource==='total-line'?'high':'low'):null
+    total:total!=null?((totalSource==='total-line'&&!mathBad)?'high':'low'):null
   };
   const sources={vendor:vendor?(vendorIdx===0?'top line':'line '+(vendorIdx+1)+' of the receipt'):'',date:dateSource,total:totalSource};
-  return {vendor,date,total,confidence,sources};
+  if(mathBad)sources.total='subtotal + tax ≠ total';
+  return {vendor,date,total,confidence,sources,math:{sub:subTotal,tax:taxAmt,bad:mathBad}};
 }
 /* ---- per-field confidence flags (rank 4) ----
    ONLY low-confidence fields get a flag: on the quick-confirm card and
    under the matching form field, so Nathan's review eyes go straight to
    the guesses. Solid fields stay unmarked. Reasons say HOW the field was
    derived (e.g. total: 'no TOTAL line — largest amount used'). */
+/* ---- vendor memory: when a scanned receipt is saved, remember the
+   vendor -> category/business/owner Nathan confirmed. The next scan
+   from that store starts from his answer instead of the generic
+   guess, and the quick-confirm card says so ('🧠 remembered'). ---- */
+function vendorKey(s){return String(s||'').toUpperCase().replace(/[^A-Z0-9 ]/g,' ').replace(/\s+/g,' ').trim().split(' ').slice(0,3).join(' ')}
+function vendorRule(vendor){const rules=DB.vendorRules||{};return rules[vendorKey(vendor)]||null}
+function learnVendorRule(desc,cat,biz,owner){if(!desc||!cat)return;DB.vendorRules=DB.vendorRules||{};DB.vendorRules[vendorKey(desc)]={cat,biz,owner}}
 const SCAN_FLAG_REASONS={
   vendor:'guessed from the top lines',
   date:'2-digit year — check the year',
@@ -1933,6 +2095,7 @@ const SCAN_FLAG_REASONS={
   biz:'no store match — default business'
 };
 function scanFlagReason(k,conf){
+  if(k==='total'&&conf&&conf.totalReason==='math')return 'subtotal + tax ≠ total — check';
   if((k==='cat'||k==='biz')&&conf&&conf[k+'Reason']==='vendor')return 'based on a guessed vendor';
   return SCAN_FLAG_REASONS[k]||'needs a look';
 }
@@ -1960,20 +2123,24 @@ function applyScanToForm(p){
   if(p.total!=null){const aEl=$('#fAmt');if(aEl)aEl.value=p.total.toFixed(2);found.push(fmt$(p.total))}
   const pc=p.confidence||{};
   const conf={vendor:p.vendor?(pc.vendor||'low'):null,date:p.date?(pc.date||'high'):null,total:p.total!=null?(pc.total||'low'):null,cat:null,biz:null,sources:p.sources||{}};
+  if(p.math&&p.math.bad){conf.total='low';conf.totalReason='math'}
   if(p.vendor){
     if(formType!=='expense'){const se=$('#segExp');if(se)se.click()} /* receipts are expenses; also rebuilds the category list */
-    const a=autoCat(p.vendor,-1);
+    const rule=vendorRule(p.vendor);
+    const a=rule||autoCat(p.vendor,-1);
     if(a.biz){const b=$('#fBiz');if(b)b.value=a.biz;const o=$('#fOwner');if(o)o.value=ownerForBiz(a.biz)}
     const c=$('#fCat');if(c&&[...c.options].some(o=>o.value===a.cat))c.value=a.cat;
+    if(rule&&rule.owner){const o=$('#fOwner');if(o)o.value=rule.owner}
     if(a.biz)found.push('→ '+bizName(a.biz)+' / '+catName(a.cat));
     /* category/business are derived from the vendor: they are guesses
        when no store rule matched (autoCat expense fallback is exactly
        other/cfp) or when the vendor itself was a guess. */
-    const guessedCat=(a.cat==='other'&&a.biz==='cfp');
+    if(rule){conf.cat='high';conf.biz='high';conf.catReason='memory';conf.bizReason='memory';found.push('🧠 remembered: '+bizName(a.biz)+' / '+catName(a.cat))}
+    else{const guessedCat=(a.cat==='other'&&a.biz==='cfp');
     conf.cat=(guessedCat||conf.vendor==='low')?'low':'high';
     conf.biz=(guessedCat||conf.vendor==='low')?'low':'high';
     if(guessedCat){conf.catReason='default';conf.bizReason='default'}
-    else if(conf.vendor==='low'){conf.catReason='vendor';conf.bizReason='vendor'}
+    else if(conf.vendor==='low'){conf.catReason='vendor';conf.bizReason='vendor'}}
   }
   lastScanConfidence=conf;
   applyFieldFlags(conf);
