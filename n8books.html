@@ -403,11 +403,11 @@ function autoCat(desc,amt){
 
 /* ================= STATE ================= */
 const KEY='n8books_v1';
-let DB={txns:[],mileage:[],customCats:[],settings:{theme:'dark'},people:[],invoices:[],docs:[],recurring:[],taxPayments:[]};
+let DB={txns:[],mileage:[],customCats:[],settings:{theme:'dark'},people:[],invoices:[],docs:[],recurring:[],taxPayments:[],inbox:[],inboxDismissed:[]};
 function loadDB(){try{const raw=localStorage.getItem(KEY);if(raw)DB=Object.assign(DB,JSON.parse(raw));}catch(e){}}
 function saveDB(){try{localStorage.setItem(KEY,JSON.stringify(DB));}catch(e){toast('⚠️ Storage full — export a backup!')}}
 loadDB();
-DB.people=DB.people||[];DB.invoices=DB.invoices||[];DB.docs=DB.docs||[];DB.recurring=DB.recurring||[];DB.taxPayments=DB.taxPayments||[];
+DB.people=DB.people||[];DB.invoices=DB.invoices||[];DB.docs=DB.docs||[];DB.recurring=DB.recurring||[];DB.taxPayments=DB.taxPayments||[];DB.inbox=DB.inbox||[];DB.inboxDismissed=DB.inboxDismissed||[];
 const OWNERS=[['nathan','👨 Nathan'],['jishawna','👩 Jishawna'],['joint','👫 Joint']];
 const ownerName=o=>(OWNERS.find(x=>x[0]===(o||'joint'))||OWNERS[2])[1];
 const ownerForBiz=b=>b==='amw'?'jishawna':b==='w2'?'nathan':'joint';
@@ -428,8 +428,8 @@ function toastWithScanAnother(msg){const t=document.createElement('div');t.class
    live in IndexedDB outside the snapshot; delDoc passes an onUndo callback
    that puts its file back. Nothing here auto-logs or auto-restores: the
    undo happens only on Nathan's explicit tap, same as Save. */
-function booksSnapshot(){try{return JSON.stringify({txns:DB.txns,mileage:DB.mileage,people:DB.people||[],invoices:DB.invoices||[],docs:DB.docs||[],recurring:DB.recurring||[],taxPayments:DB.taxPayments||[],customCats:DB.customCats||[]})}catch(e){return null}}
-function restoreBooksSnapshot(snap){if(!snap)return false;try{const b=JSON.parse(snap);DB.txns=b.txns||[];DB.mileage=b.mileage||[];DB.people=b.people||[];DB.invoices=b.invoices||[];DB.docs=b.docs||[];DB.recurring=b.recurring||[];DB.taxPayments=b.taxPayments||[];DB.customCats=b.customCats||[];saveDB();fillYears();return true}catch(e){return false}}
+function booksSnapshot(){try{return JSON.stringify({txns:DB.txns,mileage:DB.mileage,people:DB.people||[],invoices:DB.invoices||[],docs:DB.docs||[],recurring:DB.recurring||[],taxPayments:DB.taxPayments||[],customCats:DB.customCats||[],inbox:DB.inbox||[],inboxDismissed:DB.inboxDismissed||[]})}catch(e){return null}}
+function restoreBooksSnapshot(snap){if(!snap)return false;try{const b=JSON.parse(snap);DB.txns=b.txns||[];DB.mileage=b.mileage||[];DB.people=b.people||[];DB.invoices=b.invoices||[];DB.docs=b.docs||[];DB.recurring=b.recurring||[];DB.taxPayments=b.taxPayments||[];DB.customCats=b.customCats||[];DB.inbox=b.inbox||[];DB.inboxDismissed=b.inboxDismissed||[];saveDB();fillYears();return true}catch(e){return false}}
 function toastWithUndo(msg,snap,onUndo){if(!snap){toast(msg);return}const t=document.createElement('div');t.className='toast toastAct';const sp=document.createElement('span');sp.textContent=msg;t.appendChild(sp);const b=document.createElement('button');b.type='button';b.className='toastBtn';b.id='undoBtn';b.textContent='↩️ Undo';b.onclick=async()=>{t.remove();if(restoreBooksSnapshot(snap)){if(onUndo){try{await onUndo()}catch(e){}}render(currentPage());toast('↩️ Undone — previous state restored')}else toast('⚠️ Undo failed — that state is gone')};t.appendChild(b);$('#toasts').appendChild(t);setTimeout(()=>{t.classList.add('out');setTimeout(()=>t.remove(),450)},8000)}
 function go(page){
   $$('#navlinks button').forEach(b=>b.classList.toggle('on',b.dataset.page===page));
@@ -541,6 +541,7 @@ function renderDash(){
     ${snap.topCats.length?snap.topCats.map(([c,v])=>`<div class="kv"><span>${catName(c)}</span><b>${fmt$(v)}</b></div><div class="prog"><i style="width:${snap.cur.exp?Math.round(v/snap.cur.exp*100):0}%"></i></div>`).join(''):'<p class="empty">No expenses yet this month.</p>'}
     </div>
   </div>
+  ${inboxAlertHTML()}
   <div class="cards">
     <div class="card reveal"><div class="lab">💰 ${curYear} Income</div><div class="big pos" data-count="${T.inc}">$0</div><div class="sub">${tx.filter(t=>t.type==='income').length} income entries</div></div>
     <div class="card reveal"><div class="lab">🧾 ${curYear} Expenses</div><div class="big neg" data-count="${T.exp}">$0</div><div class="sub">${tx.filter(t=>t.type==='expense').length} expense entries</div></div>
@@ -834,6 +835,116 @@ function txPage(d){txFilter.page+=d;renderTxns()}
 </script>
 <script>
 'use strict';
+/* ================= AUTO-COLLECT INBOX =================
+   A background collector (Plaid -> Chime) drops new bank transactions
+   into the Drive backup's data.inbox. This side NEVER posts them:
+   drivePullInbox merges only the inbox list into the local books,
+   Nathan reviews every row on the Import page (same preview rule as
+   file imports), checks what he wants, and taps 'Add checked to
+   books'. Dismissed items are remembered (DB.inboxDismissed) so the
+   collector won't re-offer them; imported items carry collectId so
+   they can't come back either. */
+function inboxItems(){DB.inbox=DB.inbox||[];return DB.inbox}
+function inboxPrefill(it){
+  if(!it.cat||!it.biz){const a=autoCat(it.desc,it.type==='income'?it.amount:-it.amount);if(!it.cat)it.cat=a.cat;if(!it.biz)it.biz=a.biz}
+  if(!it.owner)it.owner=ownerForBiz(it.biz);
+  if(!it.method)it.method='Chime';
+  return it;
+}
+function mergeInboxItems(remote){
+  const have=new Set(inboxItems().map(x=>x.cid));
+  const imported=new Set(DB.txns.map(t=>t.collectId).filter(Boolean));
+  const dismissed=new Set(DB.inboxDismissed||[]);
+  let added=0;
+  (remote||[]).forEach(r=>{
+    if(!r||!r.cid||have.has(r.cid)||imported.has(r.cid)||dismissed.has(r.cid))return;
+    inboxItems().push(inboxPrefill({cid:r.cid,src:r.src||'Plaid',date:r.date,desc:r.desc,amount:Math.abs(+r.amount||0),type:r.type==='income'?'income':'expense',cat:r.cat||'',biz:r.biz||'',owner:r.owner||'',method:r.method||'Chime',note:r.note||''}));
+    have.add(r.cid);added++;
+  });
+  return added;
+}
+let _inboxPullBusy=false,_inboxPulledAt=0;
+async function drivePullInbox(manual){
+  if(_inboxPullBusy)return 0;
+  const d=drv();
+  if(!d.enabled){if(manual)toast('☁️ Connect Google Drive first — one tap in Settings');return 0}
+  _inboxPullBusy=true;
+  try{
+    const fid=await driveFindFile();if(!fid){if(manual)toast('No Drive backup found yet');return 0}
+    const r=await driveApi('/drive/v3/files/'+fid+'?alt=media');
+    const j=await r.json();
+    const remote=(j&&j.data&&Array.isArray(j.data.inbox))?j.data.inbox:[];
+    if(j&&j.data&&Array.isArray(j.data.inboxDismissed)){const dis=new Set(DB.inboxDismissed||[]);j.data.inboxDismissed.forEach(x=>dis.add(x));DB.inboxDismissed=[...dis].slice(-1000)}
+    const added=mergeInboxItems(remote);
+    _inboxPulledAt=Date.now();
+    if(added>0){saveDB();if(currentPage()==='import')renderImport();if(manual)toast('🤖 '+added+' new collected transaction'+(added===1?'':'s')+' waiting in the inbox')}
+    else if(manual)toast('🤖 Inbox is up to date — nothing new collected');
+    return added;
+  }catch(e){if(manual)toast('⚠️ Inbox pull failed: '+e.message);return 0}
+  finally{_inboxPullBusy=false}
+}
+function maybeAutoPullInbox(){if(Date.now()-_inboxPulledAt>60000)drivePullInbox(false)}
+function inboxPanelHTML(){
+  const items=[...inboxItems()].sort((a,b)=>b.date.localeCompare(a.date));
+  const sigs=new Set(DB.txns.map(t=>t.sig||txnSig(t)));
+  if(!items.length)return `<div class="panel reveal in"><h2>🤖 Auto-Collect Inbox</h2>
+    <p class="hint">Your Chime transactions are collected automatically (via Plaid) and land here for review — <b>nothing is ever posted without your tap</b>. ${drv().enabled?'':'Connect Google Drive in Settings so collected items can reach this device.'}</p>
+    <button class="btn ghost" onclick="drivePullInbox(true)">⬇️ Check for collected items</button></div>`;
+  return `<div class="panel reveal in"><h2>🤖 Auto-Collect Inbox — ${items.length} waiting</h2>
+    <p class="hint">Collected from your bank feed (Chime via Plaid). Review every row — uncheck or dismiss what you don't want, fix categories inline, then add. Rows marked ⚠️ look like duplicates of entries already in your books and start unchecked.</p>
+    <div class="twrap" style="max-height:420px;overflow-y:auto"><table><tr><th>✔</th><th>Date</th><th>Description</th><th>Category</th><th>Business</th><th style="text-align:right">Amount</th><th></th></tr>
+    ${items.map(it=>{const dupe=sigs.has(txnSig(it));return `<tr ${dupe?'style="opacity:.55"':''}>
+      <td><input type="checkbox" class="ibKeep" data-cid="${it.cid}" ${dupe?'':'checked'}></td>
+      <td style="white-space:nowrap">${it.date}</td>
+      <td>${esc(it.desc)} <span class="chip">${esc(it.src||'Plaid')}</span>${dupe?' <span class="chip" style="border-color:var(--gold);color:var(--gold)">⚠️ already in books?</span>':''}</td>
+      <td><select class="ibCat" data-cid="${it.cid}">${CATS.filter(c=>c[2]===it.type).map(c=>`<option value="${c[0]}" ${it.cat===c[0]?'selected':''}>${c[1]}</option>`).join('')}</select></td>
+      <td><select class="ibBiz" data-cid="${it.cid}">${BIZ.map(b=>`<option value="${b.id}" ${it.biz===b.id?'selected':''}>${b.n}</option>`).join('')}</select></td>
+      <td class="amt ${it.type==='income'?'pos':'neg'}">${it.type==='income'?'+':'-'}${fmt$(it.amount)}</td>
+      <td><button class="iconbtn" title="Dismiss — never offer this again" onclick="dismissInbox('${it.cid}')">✖</button></td></tr>`}).join('')}
+    </table></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap">
+      <button class="btn ghost" onclick="drivePullInbox(true)">⬇️ Check for more</button>
+      <button class="btn ghost" onclick="dismissAllInbox()">Dismiss all</button>
+      <button class="btn" onclick="applyInbox()">✅ Add checked to books</button>
+    </div></div>`;
+}
+function applyInbox(){
+  const rows=[...document.querySelectorAll('#page-import .ibKeep')];
+  const chosen=rows.filter(r=>r.checked).map(r=>r.dataset.cid);
+  if(!chosen.length){toast('Check at least one row first');return}
+  const snap=booksSnapshot();
+  let n=0;
+  chosen.forEach(cid=>{
+    const it=inboxItems().find(x=>x.cid===cid);if(!it)return;
+    const catEl=document.querySelector('.ibCat[data-cid="'+cid+'"]'),bizEl=document.querySelector('.ibBiz[data-cid="'+cid+'"]');
+    const biz=bizEl?bizEl.value:it.biz;
+    const nt={id:uid(),date:it.date,desc:it.desc,amount:it.amount,type:it.type,cat:catEl?catEl.value:it.cat,biz:biz,method:it.method||'Chime',note:it.note||'',src:'collect',collectId:cid,owner:it.owner||ownerForBiz(biz)};
+    nt.sig=txnSig(nt);DB.txns.push(nt);n++;
+  });
+  DB.inbox=inboxItems().filter(x=>!chosen.includes(x.cid));
+  saveDB();fillYears();renderImport();
+  toastWithUndo('🤖 '+n+' collected transaction'+(n===1?'':'s')+' added to your books',snap);
+}
+function dismissInbox(cid){
+  const snap=booksSnapshot();
+  DB.inboxDismissed=[...new Set([...(DB.inboxDismissed||[]),cid])].slice(-1000);
+  DB.inbox=inboxItems().filter(x=>x.cid!==cid);
+  saveDB();renderImport();toastWithUndo('🚫 Dismissed — the collector won\'t offer it again',snap);
+}
+function dismissAllInbox(){
+  if(!inboxItems().length)return;
+  const snap=booksSnapshot();
+  DB.inboxDismissed=[...new Set([...(DB.inboxDismissed||[]),...inboxItems().map(x=>x.cid)])].slice(-1000);
+  DB.inbox=[];saveDB();renderImport();toastWithUndo('🚫 Whole inbox dismissed',snap);
+}
+function inboxAlertHTML(){
+  const n=inboxItems().length;
+  if(!n)return '';
+  return `<div class="panel reveal in" style="border-color:var(--acc)"><h2>🤖 ${n} collected transaction${n===1?'':'s'} waiting for review</h2>
+    <p class="hint">Auto-collected from Chime — nothing has been posted. Review them in the inbox and add only what you want.</p>
+    <button class="btn" onclick="go('import')">Review inbox →</button></div>`;
+}
+
 /* ================= IMPORT ================= */
 let pendingImport=[];
 /* Backup restore is preview-first: show exactly what would replace the
@@ -860,6 +971,7 @@ function applyRestore(){
 }
 function renderImport(){
   $('#page-import').innerHTML=`
+  ${inboxPanelHTML()}
   <div class="panel reveal in"><h2>📥 Import Transactions</h2>
     <p class="hint">Drop a bank CSV export (Cash App, Chime, Citizens, PayPal, Wisely…) — N8Books detects the columns, auto-categorizes with your rules, and lets you review before anything is saved. JSON backups from N8Books also work.</p>
     <div class="frow"><div class="fld"><label>Bank format</label><select id="impPreset"><option value="auto">🔍 Auto-detect</option><option value="cashapp">Cash App</option><option value="chime">Chime</option><option value="citizens">Citizens Bank</option><option value="wisely">Wisely</option><option value="generic">Generic CSV</option></select></div>
@@ -879,6 +991,7 @@ function renderImport(){
   dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('over');if(e.dataTransfer.files[0])readFile(e.dataTransfer.files[0])});
   fi.addEventListener('change',()=>{if(fi.files[0])readFile(fi.files[0])});
   watchReveals();
+  maybeAutoPullInbox();
 }
 function readFile(f){
   const r=new FileReader();
