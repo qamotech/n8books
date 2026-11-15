@@ -2667,6 +2667,10 @@ function backupHasData(j){
   if(!j||!j.data)return false;const d=j.data;
   return !!((d.txns&&d.txns.length)||(d.invoices&&d.invoices.length)||(d.mileage&&d.mileage.length)||(d.docs&&d.docs.length)||(d.inbox&&d.inbox.length));
 }
+function backupHasBooks(j){
+  if(!j||!j.data)return false;const d=j.data;
+  return !!((d.txns&&d.txns.length)||(d.invoices&&d.invoices.length)||(d.mileage&&d.mileage.length)||(d.docs&&d.docs.length));
+}
 function applyDriveBackup(j){
   const prev=drv();
   DB=j.data;DB.settings=DB.settings||{};
@@ -2683,10 +2687,10 @@ async function driveSaveNow(manual){
   try{
     if(!driveClientId()){if(manual)toast('⚠️ Drive sync needs its Google key first — see Settings');return false}
     if(manual||!_drvToken)await driveGetToken(!!manual);
-    if(booksEmpty()&&!(DB.inbox&&DB.inbox.length)){
+    if(booksEmpty()){
       let bj=null,fetchFailed=false;
       try{bj=await driveFetchBackup()}catch(e){fetchFailed=true}
-      if(backupHasData(bj)){
+      if(backupHasBooks(bj)){
         applyDriveBackup(bj);
         toast('🛡️ This device\'s books were empty — instead of saving over your Drive backup, your books were loaded from it.');
         return false;
