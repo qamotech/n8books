@@ -937,12 +937,19 @@ function dismissAllInbox(){
   DB.inboxDismissed=[...new Set([...(DB.inboxDismissed||[]),...inboxItems().map(x=>x.cid)])].slice(-1000);
   DB.inbox=[];saveDB();renderImport();toastWithUndo('🚫 Whole inbox dismissed',snap);
 }
+function booksEmpty(db){db=db||DB;return !(db.txns&&db.txns.length)&&!(db.invoices&&db.invoices.length)&&!(db.mileage&&db.mileage.length)&&!(db.docs&&db.docs.length)}
 function inboxAlertHTML(){
   const n=inboxItems().length;
-  if(!n)return '';
-  return `<div class="panel reveal in" style="border-color:var(--acc)"><h2>🤖 ${n} collected transaction${n===1?'':'s'} waiting for review</h2>
+  if(n)return `<div class="panel reveal in" style="border-color:var(--acc)"><h2>🤖 ${n} collected transaction${n===1?'':'s'} waiting for review</h2>
     <p class="hint">Auto-collected from Chime — nothing has been posted. Review them in the inbox and add only what you want.</p>
     <button class="btn" onclick="go('import')">Review inbox →</button></div>`;
+  if(booksEmpty()){
+    const en=(typeof drv==='function')?!!drv().enabled:false;
+    return `<div class="panel reveal in" style="border-color:var(--gold)"><h2>📒 No books on this device yet</h2>
+    <p class="hint">Your books live in your Google Drive backup (<b>N8Books-Backup.json</b>) — ${en?'tap below and they load right in.':'connect Drive once and they load right in, then they open automatically every time.'}</p>
+    <button class="btn" onclick="driveConnect()">☁️ ${en?'Load My Books from Drive':'Connect & Load My Books'}</button></div>`;
+  }
+  return '';
 }
 
 /* ================= IMPORT ================= */
@@ -2608,11 +2615,53 @@ async function driveFindFile(){
   if(j.files&&j.files.length){d.fileId=j.files[0].id;return d.fileId}
   return '';
 }
+/* ================= AUTO-LOAD + EMPTY-SAVE GUARD (v26) =================
+   Nathan's rule: opening the app should just show his books. Three
+   pieces work together: driveFetchBackup/backupHasData read the Drive
+   backup; applyDriveBackup loads it into this device; driveAutoLoadOnOpen
+   runs at boot when Drive is connected here. And driveSaveNow refuses
+   to upload an empty local book over a backup that has data — the
+   2026-11-14 wipe (an empty app connected Drive and its first auto-save
+   erased the backup) can never happen again. localMod stamps the last
+   local change so "which copy is newer" is a real comparison. */
+function localModMs(){try{return +localStorage.getItem('n8books_localMod')||0}catch(e){return 0}}
+function stampLocalMod(ms){try{localStorage.setItem('n8books_localMod',String(ms||Date.now()))}catch(e){}}
+async function driveFetchBackup(){
+  const fid=await driveFindFile();if(!fid)return null;
+  const r=await driveApi('/drive/v3/files/'+fid+'?alt=media');
+  const j=await r.json();
+  return (j&&j.data&&Array.isArray(j.data.txns))?j:null;
+}
+function backupHasData(j){
+  if(!j||!j.data)return false;const d=j.data;
+  return !!((d.txns&&d.txns.length)||(d.invoices&&d.invoices.length)||(d.mileage&&d.mileage.length)||(d.docs&&d.docs.length)||(d.inbox&&d.inbox.length));
+}
+function applyDriveBackup(j){
+  const prev=drv();
+  DB=j.data;DB.settings=DB.settings||{};
+  const bd=DB.settings.drive||{};
+  DB.settings.drive=Object.assign({enabled:true,auto:true,fileId:'',lastSave:'',email:''},bd,{enabled:true,fileId:prev.fileId||bd.fileId||'',email:prev.email||bd.email||''});
+  if(!Array.isArray(DB.inbox))DB.inbox=[];
+  if(!Array.isArray(DB.inboxDismissed))DB.inboxDismissed=[];
+  stampLocalMod(Date.parse(j.savedAt||'')||Date.now());
+  _saveDBBase();fillYears();renderBackupChip();
+  go(currentPage());
+}
 async function driveSaveNow(manual){
   const d=drv();
   try{
     if(!driveClientId()){if(manual)toast('⚠️ Drive sync needs its Google key first — see Settings');return false}
     if(manual||!_drvToken)await driveGetToken(!!manual);
+    if(booksEmpty()&&!(DB.inbox&&DB.inbox.length)){
+      let bj=null,fetchFailed=false;
+      try{bj=await driveFetchBackup()}catch(e){fetchFailed=true}
+      if(backupHasData(bj)){
+        applyDriveBackup(bj);
+        toast('🛡️ This device\'s books were empty — instead of saving over your Drive backup, your books were loaded from it.');
+        return false;
+      }
+      if(fetchFailed){if(manual)toast('⚠️ Couldn\'t check your Drive backup — skipped the empty save to protect it');return false}
+    }
     const payload=JSON.stringify({app:'N8Books',version:3,savedAt:new Date().toISOString(),data:DB},null,2);
     let fid=await driveFindFile();
     if(fid){
@@ -2627,7 +2676,7 @@ async function driveSaveNow(manual){
       const r=await fetch('https://www.googleapis.com/upload/drive/v3/files/'+fid+'?uploadType=media',{method:'PATCH',headers:{'Authorization':'Bearer '+tok,'Content-Type':'application/json'},body:payload});
       if(!r.ok)throw new Error('Upload '+r.status);
     }
-    d.lastSave=new Date().toLocaleString();d.lastSaveISO=new Date().toISOString();_saveDBBase();renderBackupChip();
+    d.lastSave=new Date().toLocaleString();d.lastSaveISO=new Date().toISOString();stampLocalMod(Date.parse(d.lastSaveISO)||Date.now());_saveDBBase();renderBackupChip();
     if(manual)toast('☁️ Books saved to Google Drive!');
     return true;
   }catch(e){
@@ -2643,8 +2692,14 @@ async function driveConnect(){
     const r=await driveApi('/drive/v3/about?fields=user(emailAddress)');
     const j=await r.json();d.email=(j.user&&j.user.emailAddress)||'';
     d.enabled=true;_saveDBBase();
-    toast('☁️ Drive connected'+(d.email?' as '+d.email:'')+'!');
-    await driveSaveNow(false);
+    let bj=null;try{bj=await driveFetchBackup()}catch(e){}
+    if(backupHasData(bj)&&(booksEmpty()||(Date.parse(bj.savedAt||'')||0)>localModMs()+2000)){
+      applyDriveBackup(bj);
+      toast('☁️ Drive connected'+(d.email?' as '+d.email:'')+' — your books were loaded from the backup!');
+    }else{
+      toast('☁️ Drive connected'+(d.email?' as '+d.email:'')+'!');
+      await driveSaveNow(false);
+    }
     renderSettings();
   }catch(e){toast('⚠️ Connect failed: '+e.message)}
 }
@@ -2661,13 +2716,10 @@ function driveLoadConfirm(){
 async function driveLoadNow(){
   try{
     await driveGetToken(true);
-    const fid=await driveFindFile();
-    if(!fid){toast('⚠️ No N8Books backup found in this Drive account');return}
-    const r=await driveApi('/drive/v3/files/'+fid+'?alt=media');
-    const j=await r.json();
-    if(!j||!j.data||!Array.isArray(j.data.txns))throw new Error('Backup file looks wrong');
-    DB=j.data;DB.settings.drive=Object.assign(drv(),{enabled:true});
-    _saveDBBase();fillYears();toast('☁️ Books restored from Drive!');go('dash');
+    const j=await driveFetchBackup();
+    if(!j){toast('⚠️ No N8Books backup found in this Drive account');return}
+    applyDriveBackup(j);
+    toast('☁️ Books restored from Drive!');go('dash');
   }catch(e){toast('⚠️ Restore failed: '+e.message)}
 }
 function scheduleDriveSave(){
@@ -2678,7 +2730,7 @@ function scheduleDriveSave(){
 }
 /* hook auto-save into every local save */
 const _saveDBBase=saveDB;
-saveDB=function(){_saveDBBase();scheduleDriveSave()};
+saveDB=function(){_saveDBBase();stampLocalMod();scheduleDriveSave()};
 function driveSaveClientId(){
   const v=$('#drvCid').value.trim();DB.settings.driveClientId=v;_saveDBBase();_drvClient=null;
   toast(v?'🔑 Google key saved! Now tap Connect Drive.':'Key cleared');renderSettings();
@@ -2705,6 +2757,24 @@ function drivePanelHTML2(){
 }
 const _renderSettingsV4=renderSettings;
 renderSettings=function(){_renderSettingsV4();$('#page-settings').insertAdjacentHTML('afterbegin',drivePanelHTML2());watchReveals()};
+/* Auto-load on open: when Drive is connected on this device, fetch the
+   backup at boot and load it when this device's books are empty or the
+   backup is newer than this device's last change. If the Google token
+   needs a tap, stay quiet — the Dashboard card offers Connect & Load. */
+let _autoLoadTried=false;
+async function driveAutoLoadOnOpen(){
+  if(_autoLoadTried)return;_autoLoadTried=true;
+  if(!drv().enabled)return;
+  let bj=null;try{bj=await driveFetchBackup()}catch(e){return}
+  if(!backupHasData(bj))return;
+  const backupMs=Date.parse(bj.savedAt||'')||0;
+  if(booksEmpty()||backupMs>localModMs()+2000){
+    applyDriveBackup(bj);
+    toast('☁️ Your books loaded automatically from Google Drive');
+  }
+  maybeAutoPullInbox();
+}
+setTimeout(()=>{driveAutoLoadOnOpen()},800);
 renderBackupChip();
 setInterval(renderBackupChip,60000);
 </script>
