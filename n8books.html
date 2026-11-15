@@ -139,6 +139,22 @@ tr:hover td{background:color-mix(in srgb,var(--panel2) 55%,transparent)}
 .chip.biz-per{border-color:#8fa3c8;color:var(--mut)}
 .iconbtn{background:none;border:1px solid var(--line);color:var(--mut);border-radius:8px;padding:4px 9px;cursor:pointer;transition:.15s}
 .iconbtn:hover{color:var(--txt);border-color:var(--acc)}
+.ibList{display:flex;flex-direction:column;gap:6px;max-height:48vh;overflow-y:auto}
+.ibRow{display:flex;gap:8px;align-items:flex-start;background:rgba(127,127,127,.06);border:1px solid var(--line);border-radius:10px;padding:7px 9px}
+.ibRow.dupe{opacity:.55}
+.ibChk{padding-top:1px}
+.ibChk input{width:19px;height:19px;accent-color:var(--acc);cursor:pointer}
+.ibMain{flex:1;min-width:0}
+.ibTop{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.ibDesc{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ibRow .amt{font-size:14px;white-space:nowrap}
+.ibSub{display:flex;gap:6px;align-items:center;margin-top:5px;flex-wrap:wrap}
+.ibDate{color:var(--mut);font-size:12px;white-space:nowrap}
+.ibBizChips{display:inline-flex;gap:4px;flex-wrap:wrap}
+.ibBizChips button{border:1px solid var(--line);background:none;color:var(--mut);border-radius:999px;padding:2px 8px;font-size:12px;cursor:pointer}
+.ibBizChips button.on{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:700}
+select.ibCat{max-width:148px;padding:3px 6px;font-size:12px}
+.ibX{margin-left:auto;padding:2px 7px}
 .pager{display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:12px;color:var(--mut);font-size:13.5px}
 
 /* ---------- dropzone ---------- */
@@ -392,6 +408,11 @@ function autoCat(desc,amt){
     if(/conference|ticket|summit|registration/.test(d))return {cat:'train',biz:'amw'};
     return {cat:'prod',biz:'amw'};
   }
+  // Nathan's defaults (2026-11-14): grocery stores and Amazon purchases
+  // are Personal unless he flips them. Amazon PAY stays W-2 (the RULES
+  // entry below) — only Amazon spending flips to personal.
+  if(amt<0&&/amazon|amzn/i.test(d))return {cat:'other',biz:'per'};
+  if(amt<0&&/\bgiant\b|food lion|weis|safeway|\baldi\b|\blidl\b|kroger|publix|harris teeter|shoprite|shop rite|stop\s?&\s?shop|\bacme\b|trader joe|whole foods|wegmans|sprouts|grocery|supermarket|food market/i.test(d))return {cat:'other',biz:'per'};
   for(const [re,cat,biz] of RULES){
     if(re.test(d)){
       if(amt>0&&(cat==='labor'||cat==='supplies'))return {cat:'inc_sales',biz:'cfp'};
@@ -846,7 +867,11 @@ function txPage(d){txFilter.page+=d;renderTxns()}
    they can't come back either. */
 function inboxItems(){DB.inbox=DB.inbox||[];return DB.inbox}
 function inboxPrefill(it){
-  if(!it.cat||!it.biz){const a=autoCat(it.desc,it.type==='income'?it.amount:-it.amount);if(!it.cat)it.cat=a.cat;if(!it.biz)it.biz=a.biz}
+  if(!it.cat||!it.biz){
+    const vr=(typeof vendorRule==='function')?vendorRule(it.desc):null;
+    if(vr){if(!it.cat)it.cat=vr.cat;if(!it.biz)it.biz=vr.biz;if(!it.owner&&vr.owner)it.owner=vr.owner}
+    else{const a=autoCat(it.desc,it.type==='income'?it.amount:-it.amount);if(!it.cat)it.cat=a.cat;if(!it.biz)it.biz=a.biz}
+  }
   if(!it.owner)it.owner=ownerForBiz(it.biz);
   if(!it.method)it.method='Chime';
   return it;
@@ -890,24 +915,27 @@ function inboxPanelHTML(){
   if(!items.length)return `<div class="panel reveal in"><h2>🤖 Auto-Collect Inbox</h2>
     <p class="hint">Your Chime transactions are collected automatically (via Plaid) and land here for review — <b>nothing is ever posted without your tap</b>. ${drv().enabled?'':'Connect Google Drive in Settings so collected items can reach this device.'}</p>
     <button class="btn ghost" onclick="drivePullInbox(true)">⬇️ Check for collected items</button></div>`;
+  const BIZSHORT={per:'Personal',cfp:'CFP',amw:'Amway',w2:'W-2'};
   return `<div class="panel reveal in"><h2>🤖 Auto-Collect Inbox — ${items.length} waiting</h2>
-    <p class="hint">Collected from your bank feed (Chime via Plaid). Review every row — uncheck or dismiss what you don't want, fix categories inline, then add. Rows marked ⚠️ look like duplicates of entries already in your books and start unchecked.</p>
-    <div class="twrap" style="max-height:420px;overflow-y:auto"><table><tr><th>✔</th><th>Date</th><th>Description</th><th>Category</th><th>Business</th><th style="text-align:right">Amount</th><th></th></tr>
-    ${items.map(it=>{const dupe=sigs.has(txnSig(it));return `<tr ${dupe?'style="opacity:.55"':''}>
-      <td><input type="checkbox" class="ibKeep" data-cid="${it.cid}" ${dupe?'':'checked'}></td>
-      <td style="white-space:nowrap">${it.date}</td>
-      <td>${esc(it.desc)} <span class="chip">${esc(it.src||'Plaid')}</span>${dupe?' <span class="chip" style="border-color:var(--gold);color:var(--gold)">⚠️ already in books?</span>':''}</td>
-      <td><select class="ibCat" data-cid="${it.cid}">${CATS.filter(c=>c[2]===it.type).map(c=>`<option value="${c[0]}" ${it.cat===c[0]?'selected':''}>${c[1]}</option>`).join('')}</select></td>
-      <td><select class="ibBiz" data-cid="${it.cid}">${BIZ.map(b=>`<option value="${b.id}" ${it.biz===b.id?'selected':''}>${b.n}</option>`).join('')}</select></td>
-      <td class="amt ${it.type==='income'?'pos':'neg'}">${it.type==='income'?'+':'-'}${fmt$(it.amount)}</td>
-      <td><button class="iconbtn" title="Dismiss — never offer this again" onclick="dismissInbox('${it.cid}')">✖</button></td></tr>`}).join('')}
-    </table></div>
+    <p class="hint">Chime collects these automatically — nothing posts without your tap. One tap on a business pill flips it; ⚠️ rows look like duplicates and start unchecked.</p>
+    <div class="ibList">
+    ${items.map(it=>{const dupe=sigs.has(txnSig(it));return `<div class="ibRow${dupe?' dupe':''}">
+      <label class="ibChk"><input type="checkbox" class="ibKeep" data-cid="${it.cid}" ${dupe?'':'checked'}></label>
+      <div class="ibMain">
+        <div class="ibTop"><span class="ibDesc">${esc(it.desc)}</span><span class="amt ${it.type==='income'?'pos':'neg'}">${it.type==='income'?'+':'-'}${fmt$(it.amount)}</span></div>
+        <div class="ibSub"><span class="ibDate">${it.date.slice(5).replace('-','/')}</span>${dupe?'<span class="chip" style="border-color:var(--gold);color:var(--gold)">⚠️ already in books?</span>':''}
+        <span class="ibBizChips" data-cid="${it.cid}">${BIZ.map(b=>`<button type="button" data-biz="${b.id}" class="${it.biz===b.id?'on':''}" onclick="ibSetBiz(this)">${b.e} ${BIZSHORT[b.id]||b.n}</button>`).join('')}</span>
+        <select class="ibCat" data-cid="${it.cid}">${CATS.filter(c=>c[2]===it.type).map(c=>`<option value="${c[0]}" ${it.cat===c[0]?'selected':''}>${c[1]}</option>`).join('')}</select>
+        <button class="iconbtn ibX" title="Dismiss — never offer this again" onclick="dismissInbox('${it.cid}')">✖</button></div>
+      </div></div>`}).join('')}
+    </div>
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap">
       <button class="btn ghost" onclick="drivePullInbox(true)">⬇️ Check for more</button>
       <button class="btn ghost" onclick="dismissAllInbox()">Dismiss all</button>
       <button class="btn" onclick="applyInbox()">✅ Add checked to books</button>
     </div></div>`;
 }
+function ibSetBiz(el){const wrap=el.closest('.ibBizChips');if(!wrap)return;wrap.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===el))}
 function applyInbox(){
   const rows=[...document.querySelectorAll('#page-import .ibKeep')];
   const chosen=rows.filter(r=>r.checked).map(r=>r.dataset.cid);
@@ -916,10 +944,13 @@ function applyInbox(){
   let n=0;
   chosen.forEach(cid=>{
     const it=inboxItems().find(x=>x.cid===cid);if(!it)return;
-    const catEl=document.querySelector('.ibCat[data-cid="'+cid+'"]'),bizEl=document.querySelector('.ibBiz[data-cid="'+cid+'"]');
-    const biz=bizEl?bizEl.value:it.biz;
-    const nt={id:uid(),date:it.date,desc:it.desc,amount:it.amount,type:it.type,cat:catEl?catEl.value:it.cat,biz:biz,method:it.method||'Chime',note:it.note||'',src:'collect',collectId:cid,owner:it.owner||ownerForBiz(biz)};
+    const catEl=document.querySelector('.ibCat[data-cid="'+cid+'"]'),chip=document.querySelector('.ibBizChips[data-cid="'+cid+'"] button.on');
+    const biz=chip?chip.dataset.biz:it.biz;
+    const cat=catEl?catEl.value:it.cat;
+    const owner=(biz!==it.biz)?ownerForBiz(biz):(it.owner||ownerForBiz(biz));
+    const nt={id:uid(),date:it.date,desc:it.desc,amount:it.amount,type:it.type,cat:cat,biz:biz,method:it.method||'Chime',note:it.note||'',src:'collect',collectId:cid,owner:owner};
     nt.sig=txnSig(nt);DB.txns.push(nt);n++;
+    if(typeof learnVendorRule==='function')learnVendorRule(it.desc,cat,biz,owner);
   });
   DB.inbox=inboxItems().filter(x=>!chosen.includes(x.cid));
   saveDB();fillYears();renderImport();
