@@ -904,6 +904,7 @@ async function drivePullInbox(manual){
     _inboxPulledAt=Date.now();
     if(added>0){saveDB();if(currentPage()==='import')renderImport();if(manual)toast('🤖 '+added+' new collected transaction'+(added===1?'':'s')+' waiting in the inbox')}
     else if(manual)toast('🤖 Inbox is up to date — nothing new collected');
+    maybeShowInboxPopup();
     return added;
   }catch(e){if(manual)toast('⚠️ Inbox pull failed: '+e.message);return 0}
   finally{_inboxPullBusy=false}
@@ -937,14 +938,17 @@ function inboxPanelHTML(){
 }
 function ibSetBiz(el){const wrap=el.closest('.ibBizChips');if(!wrap)return;wrap.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===el))}
 function applyInbox(){
-  const rows=[...document.querySelectorAll('#page-import .ibKeep')];
+  const pop=document.querySelector('#ibPop');
+  const scope=(pop&&$('#modalWrap').classList.contains('on'))?pop:document.querySelector('#page-import');
+  if(!scope){toast('Open the inbox first');return}
+  const rows=[...scope.querySelectorAll('.ibKeep')];
   const chosen=rows.filter(r=>r.checked).map(r=>r.dataset.cid);
   if(!chosen.length){toast('Check at least one row first');return}
   const snap=booksSnapshot();
   let n=0;
   chosen.forEach(cid=>{
     const it=inboxItems().find(x=>x.cid===cid);if(!it)return;
-    const catEl=document.querySelector('.ibCat[data-cid="'+cid+'"]'),chip=document.querySelector('.ibBizChips[data-cid="'+cid+'"] button.on');
+    const catEl=scope.querySelector('.ibCat[data-cid="'+cid+'"]'),chip=scope.querySelector('.ibBizChips[data-cid="'+cid+'"] button.on');
     const biz=chip?chip.dataset.biz:it.biz;
     const cat=catEl?catEl.value:it.cat;
     const owner=(biz!==it.biz)?ownerForBiz(biz):(it.owner||ownerForBiz(biz));
@@ -953,27 +957,64 @@ function applyInbox(){
     if(typeof learnVendorRule==='function')learnVendorRule(it.desc,cat,biz,owner);
   });
   DB.inbox=inboxItems().filter(x=>!chosen.includes(x.cid));
-  saveDB();fillYears();renderImport();
+  saveDB();fillYears();
+  if(pop&&$('#modalWrap').classList.contains('on')){
+    if(inboxItems().length){pop.innerHTML=inboxPanelHTML()}
+    else{closeModal();render(currentPage())}
+  }else renderImport();
   toastWithUndo('🤖 '+n+' collected transaction'+(n===1?'':'s')+' added to your books',snap);
+}
+function refreshInboxPopup(){
+  const pop=document.querySelector('#ibPop');
+  if(pop&&$('#modalWrap').classList.contains('on')){
+    if(inboxItems().length)pop.innerHTML=inboxPanelHTML();
+    else closeModal();
+  }
 }
 function dismissInbox(cid){
   const snap=booksSnapshot();
   DB.inboxDismissed=[...new Set([...(DB.inboxDismissed||[]),cid])].slice(-1000);
   DB.inbox=inboxItems().filter(x=>x.cid!==cid);
-  saveDB();renderImport();toastWithUndo('🚫 Dismissed — the collector won\'t offer it again',snap);
+  saveDB();renderImport();refreshInboxPopup();toastWithUndo('🚫 Dismissed — the collector won\'t offer it again',snap);
 }
 function dismissAllInbox(){
   if(!inboxItems().length)return;
   const snap=booksSnapshot();
   DB.inboxDismissed=[...new Set([...(DB.inboxDismissed||[]),...inboxItems().map(x=>x.cid)])].slice(-1000);
-  DB.inbox=[];saveDB();renderImport();toastWithUndo('🚫 Whole inbox dismissed',snap);
+  DB.inbox=[];saveDB();renderImport();refreshInboxPopup();toastWithUndo('🚫 Whole inbox dismissed',snap);
 }
 function booksEmpty(db){db=db||DB;return !(db.txns&&db.txns.length)&&!(db.invoices&&db.invoices.length)&&!(db.mileage&&db.mileage.length)&&!(db.docs&&db.docs.length)}
+/* ---- Review-on-open popup ----
+   Nathan asked (2026-11-17): "I don't know where to go to approve
+   categories — make a pop up with everything I need to do that pops
+   up when I open the app." So: once per app open, when collected
+   items are waiting, the full inbox review (business pills, category
+   selects, Add checked, dismiss) opens in a modal with the steps
+   spelled out. Same controls as the Import page panel — applyInbox
+   scopes itself to whichever surface is live. Shows once per open;
+   closing it with "Later" leaves the Dashboard card + Import page
+   paths exactly as before. */
+let _inboxPopupShown=false;
+function openInboxPopup(){
+  if(!inboxItems().length)return;
+  openModal(`<h3>👋 Here's what needs you</h3>
+  <p style="color:var(--mut);margin-bottom:12px">These Chime transactions were collected automatically and are <b style="color:var(--txt)">waiting for your category approval</b> — nothing posts to your books until you tap ✅.<br><br>
+  <b style="color:var(--txt)">For each one:</b> 1️⃣ check the business pill + category are right &nbsp;2️⃣ tick the ones to add &nbsp;3️⃣ hit <b style="color:var(--txt)">✅ Add checked to books</b>. The ✖ dismisses ones you never want to see again.</p>
+  <div id="ibPop">${inboxPanelHTML()}</div>
+  <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px"><button class="btn ghost" onclick="closeModal()">Later — I'll do it next open</button></div>`);
+}
+function maybeShowInboxPopup(){
+  if(_inboxPopupShown)return;
+  if(!inboxItems().length)return;
+  if($('#modalWrap').classList.contains('on'))return;
+  _inboxPopupShown=true;
+  openInboxPopup();
+}
 function inboxAlertHTML(){
   const n=inboxItems().length;
   if(n)return `<div class="panel reveal in" style="border-color:var(--acc)"><h2>🤖 ${n} collected transaction${n===1?'':'s'} waiting for review</h2>
-    <p class="hint">Auto-collected from Chime — nothing has been posted. Review them in the inbox and add only what you want.</p>
-    <button class="btn" onclick="go('import')">Review inbox →</button></div>`;
+    <p class="hint">Auto-collected from Chime — nothing has been posted. Review them right here and add only what you want.</p>
+    <button class="btn" onclick="openInboxPopup()">Review now →</button></div>`;
   if(booksEmpty()){
     const en=(typeof drv==='function')?!!drv().enabled:false;
     return `<div class="panel reveal in" style="border-color:var(--gold)"><h2>📒 No books on this device yet</h2>
@@ -1202,6 +1243,7 @@ function renderMileage(){
     <div class="card reveal in"><div class="lab">💸 Deduction Value</div><div class="big gold">${fmt$(tot*rate)}</div><div class="sub">at the ${curYear} IRS rate of ${fmt$(rate)}/mi</div></div>
     <div class="card reveal in"><div class="lab">🧮 Rate Table</div><div class="sub" style="font-size:14px;margin-top:8px">${Object.entries(MILEAGE_RATES).map(([y,r])=>`${y}: $${r.toFixed(3)}/mi`).join('<br>')}</div></div>
   </div>
+  ${quickTripHTML()}
   <div class="panel reveal in"><h2>🛣️ Mileage Log</h2><p class="hint">The IRS wants date, miles, and business purpose. This log is exactly that.</p>
     <button class="btn" onclick="openMileage()">➕ Log a Trip</button>
     ${ms.length?`<div class="twrap" style="margin-top:14px"><table><tr><th>Date</th><th>Purpose / Route</th><th>Business</th><th style="text-align:right">Miles</th><th style="text-align:right">Value</th><th></th></tr>
@@ -1209,6 +1251,45 @@ function renderMileage(){
     <td style="white-space:nowrap"><button class="iconbtn" title="Edit this trip" onclick="openMileage('${m.id}')">✏️</button> ${m.docId?`<button class="iconbtn" title="View attached photo" onclick="viewDoc('${m.docId}')">📎</button> `:''}<button class="iconbtn" onclick="delMile('${m.id}')">🗑</button></td></tr>`).join('')}</table></div>`:'<p class="empty">No trips logged for '+curYear+' yet.</p>'}
   </div>`;
   watchReveals();
+}
+/* ---- #99 Mileage one-tap job trip ----
+   A quick panel on the Mileage page: trips are pre-tagged 🔧 CFP +
+   today, the miles box remembers his last CFP trip's miles, and one
+   tap on a recent job or a person logs the entry — no form. Every
+   log carries ↩️ Undo (booksSnapshot), and the entry is a normal
+   mileage row he can edit like any other. */
+function quickTripHTML(){
+  const cfp=(DB.mileage||[]).filter(m=>m.biz==='cfp').slice().sort((a,b)=>b.date.localeCompare(a.date));
+  const defMiles=cfp.length?cfp[0].miles:12;
+  const purposes=[];const seen=new Set();
+  for(const m of cfp){const p=(m.purpose||'').replace(/\s*\(round trip\)\s*/g,'').trim();if(p&&!seen.has(p)){seen.add(p);purposes.push(p)}if(purposes.length>=5)break}
+  const people=(DB.people||[]).slice(0,8);
+  return `<div class="panel reveal in"><h2>⚡ One-Tap Job Trip</h2>
+  <p class="hint">Pre-tagged 🔧 Clark Family Projects · today. Set the miles once, then tap a job — it's logged. Wrong tap? Every log comes with ↩️ Undo.</p>
+  <div class="frow"><div class="fld"><label>Miles (one way)</label><input type="number" id="qtMiles" step="0.1" min="0" value="${defMiles}"></div>
+  <div class="fld"><label style="display:flex;gap:8px;align-items:center;cursor:pointer;font-size:14px;margin-top:24px"><input type="checkbox" id="qtRound" style="width:18px;height:18px;accent-color:var(--acc)"> ⇄ Round trip (doubles)</label></div></div>
+  ${purposes.length?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin:2px 0 10px">${purposes.map(p=>`<button class="btn small" data-purpose="${esc(p)}" onclick="quickLogTrip(this.dataset.purpose)">🚗 ${esc(p)}</button>`).join('')}</div>`:''}
+  ${people.length?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin:2px 0 10px">${people.map(p=>`<button class="btn small ghost" data-purpose="Job trip — ${esc(p.name)}" onclick="quickLogTrip(this.dataset.purpose)">👤 ${esc(p.name)}</button>`).join('')}</div>`:''}
+  <div class="frow"><div class="fld" style="flex:2"><label>…or type the job / client</label><input id="qtCustom" placeholder="e.g. Asia Hull — turnover"></div>
+  <div class="fld" style="flex:0 0 auto"><label>&nbsp;</label><button class="btn" onclick="quickLogCustom()">🚗 Log Trip</button></div></div>
+  </div>`;
+}
+function quickLogTrip(purpose){
+  if(!purpose)return;
+  let miles=parseFloat(($('#qtMiles')||{}).value)||0;
+  if(!(miles>0)){toast('⚠️ Put the miles in first');const q=$('#qtMiles');if(q)q.focus();return}
+  let purp=purpose;
+  if($('#qtRound')&&$('#qtRound').checked){miles=Math.round(miles*20)/10;if(!purp.includes('(round trip)'))purp+=' (round trip)'}
+  miles=Math.round(miles*10)/10;
+  const _snap=booksSnapshot();
+  DB.mileage.push({id:uid(),date:todayStr(),miles: miles,purpose:purp,biz:'cfp'});
+  saveDB();fillYears();renderMileage();
+  toastWithUndo('🚗 Logged '+miles+' mi — '+purpose,_snap);
+}
+function quickLogCustom(){
+  const t=(($('#qtCustom')||{}).value||'').trim();
+  if(!t){toast('⚠️ Type the job first');const q=$('#qtCustom');if(q)q.focus();return}
+  quickLogTrip(t.startsWith('Job trip')?t:'Job trip — '+t);
 }
 function openMileage(id){
   const m=id?DB.mileage.find(x=>x.id===id):null;
@@ -1884,6 +1965,7 @@ function renderTaxHQ(){
       <div class="panel" style="margin:0"><h2 style="font-size:16px">${d.type==='Receipt'?'🧾':d.type.startsWith('1099')?'📑':d.type==='W-2'?'🏭':'📄'} ${esc(d.name)}</h2>
       <div class="kv"><span>Type</span><b>${esc(d.type)}</b></div>
       <div class="kv"><span>Business</span><b>${bizName(d.biz)}</b></div>
+      ${d.amount?`<div class="kv"><span>Amount</span><b>${fmt$(d.amount)}</b></div>`:''}
       ${(d.txnId||d.linkId)?`<div class="kv"><span>Linked</span><b>📎 Attached to an entry</b></div>`:''}
       ${d.mime.startsWith('image')?`<img data-docimg="${d.id}" alt="document" style="width:100%;border-radius:10px;margin-top:8px;max-height:180px;object-fit:cover;background:var(--panel2)">`:''}
       <div style="display:flex;gap:8px;margin-top:10px">
@@ -1939,12 +2021,15 @@ function stageDoc(file){
     $('#docMeta').innerHTML=`<div class="panel" style="margin-top:14px"><h2>👀 Preview &amp; Tag — "${esc(file.name)}"</h2>
       <p class="hint">Nothing is saved yet. Check this is the right file and it's readable, tag it, then save.</p>
       ${preview}
+      <div id="docAutoTag"></div>
       <div class="frow" style="margin-top:12px"><div class="fld"><label>Document Type</label><select id="dType">${['Receipt','W-2','1099-NEC','1099-MISC','Bank Statement','Contract','Other'].map(t=>`<option>${t}</option>`).join('')}</select></div>
       <div class="fld"><label>Business</label><select id="dBiz">${BIZ.map(b=>`<option value="${b.id}">${b.e} ${b.n}</option>`).join('')}</select></div>
       <div class="fld"><label>Tax Year</label><input type="number" id="dYear" value="${curYear}"></div>
+      <div class="fld"><label>Amount $ (receipts)</label><input type="number" id="dAmount" step="0.01" min="0" placeholder="optional"></div>
       <div class="fld" style="flex:2"><label>Display Name</label><input id="dName" value="${esc(file.name)}"></div></div>
       <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn" onclick="saveDoc()">💾 Save to Vault</button><button class="btn ghost" onclick="discardStagedDoc()">✖ Discard — don't save</button></div></div>`;
     $('#docMeta').scrollIntoView({behavior:'smooth'});
+    if(isImg)autoTagStagedDoc(dataUrl,file.name);
   };
   if(file.type.startsWith('image/')){
     const img=new Image();
@@ -1959,12 +2044,43 @@ function stageDoc(file){
     const r=new FileReader();r.onload=()=>finish(r.result);r.readAsDataURL(file);
   }
 }
-function discardStagedDoc(){stagedDoc=null;const el=$('#docMeta');if(el)el.innerHTML='';toast('🗑 Discarded — nothing was saved')}
+/* ---- #45 Receipt photo auto-tag (Document Vault) ----
+   When a PHOTO is staged in the Vault, the same OCR pipeline as the
+   receipt scanner reads it and PRE-FILLS the tag form: vendor + total
+   into the display name, an Amount field, type Receipt, the business
+   autoCat guesses, and the tax year from the receipt date. strictly
+   preview-first — it only fills form fields for his review; nothing
+   is stored until he taps Save to Vault. A scan that lands after he
+   discarded (or staged a different file) is dropped via the dataUrl
+   identity check. Failures degrade to a quiet hint, never an error. */
+async function autoTagStagedDoc(dataUrl,origName){
+  const box=$('#docAutoTag');if(!box)return;
+  box.innerHTML='<p class="hint" style="margin-top:10px">🔍 Reading the photo for a vendor + amount…</p>';
+  try{
+    const img=await preprocessImageForOCR(dataUrl);
+    const text=await runReceiptOCR(img,p=>{const b=$('#docAutoTag');if(b&&stagedDoc&&stagedDoc.dataUrl===dataUrl)b.innerHTML='<p class="hint" style="margin-top:10px">🔍 Reading the photo… '+p+'%</p>'});
+    if(!stagedDoc||stagedDoc.dataUrl!==dataUrl)return;
+    const r=parseReceiptText(text||'');
+    const b2=$('#docAutoTag');if(!b2)return;
+    if(!r.vendor&&r.total==null){b2.innerHTML='<p class="hint" style="margin-top:10px">🤖 Auto-tag: couldn\'t read a vendor or total on this one — tag it by hand below.</p>';return}
+    let bizGuess='';
+    if(r.vendor){const a=autoCat(r.vendor,-(r.total||0));if(a&&a.biz)bizGuess=a.biz}
+    const nameEl=$('#dName');
+    if(r.vendor&&nameEl&&nameEl.value===origName)nameEl.value=r.vendor+(r.total!=null?' — '+fmt$(r.total):'');
+    if(r.total!=null){const am=$('#dAmount');if(am&&!am.value)am.value=(Math.round(r.total*100)/100).toFixed(2)}
+    if(r.vendor){const ty=$('#dType');if(ty)ty.value='Receipt'}
+    if(bizGuess){const bz=$('#dBiz');if(bz)bz.value=bizGuess}
+    if(r.date){const yr=$('#dYear');if(yr)yr.value=r.date.slice(0,4)}
+    window._docAutoTag={vendor:r.vendor||'',total:r.total};
+    b2.innerHTML='<p class="hint" style="margin-top:10px">🤖 <b>Auto-tag:</b> '+(r.vendor?esc(r.vendor):'vendor not read')+(r.total!=null?' · <b>'+fmt$(r.total)+'</b>':'')+(bizGuess?' · looks like '+esc(bizName(bizGuess)):'')+' — filled in below for your review. Nothing is saved until you tap 💾 Save to Vault.</p>';
+  }catch(e){const b3=$('#docAutoTag');if(b3)b3.innerHTML='<p class="hint" style="margin-top:10px">🤖 Auto-tag unavailable ('+esc((e&&e.message)||'OCR failed')+') — tag it by hand below.</p>'}
+}
+function discardStagedDoc(){stagedDoc=null;window._docAutoTag=null;const el=$('#docMeta');if(el)el.innerHTML='';toast('🗑 Discarded — nothing was saved')}
 async function saveDoc(){
   if(!stagedDoc)return;
   const id=uid();
   try{await idbPut('docs',id,stagedDoc.dataUrl)}catch(e){toast('⚠️ Browser storage blocked the save');return}
-  DB.docs.push({id,name:$('#dName').value.trim()||stagedDoc.name,type:$('#dType').value,biz:$('#dBiz').value,year:+$('#dYear').value||curYear,mime:stagedDoc.mime,added:todayStr(),sizeKB:Math.round(stagedDoc.dataUrl.length*0.75/1024)});
+  DB.docs.push({id,name:$('#dName').value.trim()||stagedDoc.name,type:$('#dType').value,biz:$('#dBiz').value,year:+$('#dYear').value||curYear,amount:(()=>{const a=parseFloat(($('#dAmount')||{}).value);return isFinite(a)&&a>0?Math.round(a*100)/100:null})(),mime:stagedDoc.mime,added:todayStr(),sizeKB:Math.round(stagedDoc.dataUrl.length*0.75/1024)});
   stagedDoc=null;saveDB();fillYears();toast('🗂️ Saved to the Vault (IndexedDB — no 5MB limit)!');renderTaxHQ();
 }
 async function viewDoc(id){
@@ -1990,13 +2106,14 @@ function openDocEdit(id){
     <div class="frow"><div class="fld" style="flex:2"><label>Display Name</label><input id="edName" value="${esc(d.name)}"></div>
     <div class="fld"><label>Document Type</label><select id="edType">${['Receipt','W-2','1099-NEC','1099-MISC','Bank Statement','Contract','Other'].map(t=>`<option ${d.type===t?'selected':''}>${t}</option>`).join('')}</select></div></div>
     <div class="frow"><div class="fld"><label>Business</label><select id="edBiz">${BIZ.map(b=>`<option value="${b.id}" ${d.biz===b.id?'selected':''}>${b.e} ${b.n}</option>`).join('')}</select></div>
-    <div class="fld"><label>Tax Year</label><input type="number" id="edYear" value="${d.year}"></div></div>
+    <div class="fld"><label>Tax Year</label><input type="number" id="edYear" value="${d.year}"></div>
+    <div class="fld"><label>Amount $ (receipts)</label><input type="number" id="edAmount" step="0.01" min="0" placeholder="optional" value="${d.amount||''}"></div></div>
     <p class="hint">This edits the name and tags only — the stored file itself doesn't change.</p>
     <div style="display:flex;gap:10px;justify-content:flex-end"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn">💾 Save Changes</button></div>
   </form>`);
   $('#docEditForm').addEventListener('submit',e=>{e.preventDefault();
     const _undoSnap=booksSnapshot();
-    d.name=$('#edName').value.trim()||d.name;d.type=$('#edType').value;d.biz=$('#edBiz').value;d.year=+$('#edYear').value||d.year;
+    d.name=$('#edName').value.trim()||d.name;d.type=$('#edType').value;d.biz=$('#edBiz').value;d.year=+$('#edYear').value||d.year;const _ea=parseFloat($('#edAmount').value);d.amount=isFinite(_ea)&&_ea>0?Math.round(_ea*100)/100:null;
     saveDB();fillYears();closeModal();toastWithUndo('✏️ Document updated!',_undoSnap);renderTaxHQ()});
 }
 </script>
@@ -2928,8 +3045,10 @@ async function driveAutoLoadOnOpen(){
     toast('☁️ Your books loaded automatically from Google Drive');
   }
   maybeAutoPullInbox();
+  maybeShowInboxPopup();
 }
 setTimeout(()=>{driveAutoLoadOnOpen()},800);
+setTimeout(()=>{maybeShowInboxPopup()},2600);
 renderBackupChip();
 setInterval(renderBackupChip,60000);
 </script>
