@@ -1010,6 +1010,14 @@ function applyRestore(){
 function renderImport(){
   $('#page-import').innerHTML=`
   ${inboxPanelHTML()}
+  <div class="panel reveal in"><h2>💵 Cash App Import Helper</h2>
+    <p class="hint">Cash App isn't in Plaid, so its history comes in by file — with the <b>same preview-first flow as every other upload: nothing saves until you tap Import on the review screen.</b></p>
+    <p class="hint" style="margin-bottom:6px">1️⃣ <b>Get the CSV:</b> on <b>cash.app</b> (web) → Activity → Statements → Export CSV. In the Cash App: Profile → Documents → Account Statements → pick a month → Export.</p>
+    <p class="hint" style="margin-bottom:6px">2️⃣ <b>Pick the file below</b> — N8Books reads Cash App's own columns: <b>Net Amount</b> (fees already in), each row named by who it was with, categories pre-filled by your rules and learned vendors.</p>
+    <p class="hint">3️⃣ <b>Review &amp; import:</b> pending/failed rows are skipped, bank cash-outs start unchecked (↔ self-transfer), duplicates are flagged — then import what's checked.</p>
+    <button class="btn" onclick="document.getElementById('caFileIn').click()">📂 Choose Cash App CSV</button>
+    <input type="file" id="caFileIn" accept=".csv,text/csv" hidden>
+  </div>
   <div class="panel reveal in"><h2>📥 Import Transactions</h2>
     <p class="hint">Drop a bank CSV export (Cash App, Chime, Citizens, PayPal, Wisely…) — N8Books detects the columns, auto-categorizes with your rules, and lets you review before anything is saved. JSON backups from N8Books also work.</p>
     <div class="frow"><div class="fld"><label>Bank format</label><select id="impPreset"><option value="auto">🔍 Auto-detect</option><option value="cashapp">Cash App</option><option value="chime">Chime</option><option value="citizens">Citizens Bank</option><option value="wisely">Wisely</option><option value="generic">Generic CSV</option></select></div>
@@ -1023,6 +1031,7 @@ function renderImport(){
     <button class="btn" onclick="parsePaste()">🔍 Preview Paste</button>
   </div>`;
   const dz=$('#dropZone'),fi=$('#fileIn');
+  const cafi=$('#caFileIn');if(cafi)cafi.addEventListener('change',()=>{if(cafi.files[0])readCashAppFile(cafi.files[0]);cafi.value=''});
   dz.addEventListener('click',()=>fi.click());
   dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('over')});
   dz.addEventListener('dragleave',()=>dz.classList.remove('over'));
@@ -1041,7 +1050,7 @@ function readFile(f){
         if(payload){previewRestore(payload,f.name);return}
         throw new Error('Not an N8Books backup');
       }
-      window._importName=f.name;window._importPreset=($('#impPreset')||{}).value||'auto';
+      window._importName=f.name;window._importPreset=($('#impPreset')||{}).value||'auto';window._cashAppSkipped=0;
       pendingImport=parseCSV(r.result);
       markDupes(pendingImport);
       showImportPreview(f.name);
@@ -1093,9 +1102,58 @@ function mkImportRow(date,desc,amt){
   const a=autoCat(desc,amt);
   return {date,desc,amount:Math.abs(amt),type:amt>=0?'income':'expense',cat:a.cat,biz:a.biz,owner:ownerForBiz(a.biz),keep:true};
 }
+/* --- Cash App guided import (2026-11-17) ---
+   Cash App has no Plaid link, so its CSV gets a dedicated reader:
+   Net Amount (fees in), rows named by counterparty, non-completed
+   rows skipped, bank cash-outs staged unchecked as self-transfers.
+   Everything still lands in the standard preview — nothing posts
+   until Nathan taps Import there. */
+function parseCashAppCSV(text){
+  const lines=text.split(/\r?\n/).filter(l=>l.trim());
+  if(lines.length<2)return {rows:[],skipped:0};
+  const head=splitCSVLine(lines[0]).map(h=>h.toLowerCase());
+  const idx=(...ns)=>head.findIndex(h=>ns.some(n=>h===n||h.includes(n)));
+  const di=idx('date'),ty=idx('type'),amN=idx('net amount'),am=idx('amount'),st=idx('status'),
+        de=idx('description'),nm=idx('name of sender','name'),nt=idx('notes');
+  const rows=[];let skipped=0;
+  for(let i=1;i<lines.length;i++){
+    const c=splitCSVLine(lines[i]);
+    if(st>=0&&c[st]&&!/complete/i.test(c[st])){skipped++;continue}
+    let amt=amN>=0?parseMoney(c[amN]):NaN;
+    if(isNaN(amt)&&am>=0)amt=parseMoney(c[am]);
+    const date=di>=0?normDate(c[di]):'';
+    if(!date||isNaN(amt)||amt===0)continue;
+    const name=nm>=0?(c[nm]||'').trim():'',descCol=de>=0?(c[de]||'').trim():'',notes=nt>=0?(c[nt]||'').trim():'';
+    let desc=name||descCol;
+    if(name&&descCol&&descCol!==name)desc=name+' — '+descCol;
+    if(notes&&notes!==desc&&!desc.includes(notes))desc=desc?desc+' — '+notes:notes;
+    if(!desc)desc=(ty>=0&&c[ty])?c[ty]:'Cash App';
+    const row=mkImportRow(date,desc,amt);
+    const vr=(typeof vendorRule==='function')?vendorRule(desc):null;
+    if(vr){row.cat=vr.cat;row.biz=vr.biz;row.owner=vr.owner||ownerForBiz(vr.biz)}
+    const typeText=ty>=0?String(c[ty]||'').toLowerCase():'';
+    if(/cash out|add cash/.test(typeText)){row.self=true;row.keep=false}
+    rows.push(row);
+  }
+  return {rows,skipped};
+}
+function readCashAppFile(f){
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      const out=parseCashAppCSV(String(r.result||''));
+      pendingImport=out.rows;
+      window._cashAppSkipped=out.skipped;
+      markDupes(pendingImport);
+      if(!pendingImport.length){toast('⚠️ No completed Cash App rows found in that file');return}
+      showImportPreview('Cash App — '+f.name);
+    }catch(err){toast('⚠️ Could not read that file: '+err.message)}
+  };
+  r.readAsText(f);
+}
 function parsePaste(){
   const txt=$('#pasteBox').value.trim();if(!txt){toast('Paste something first');return}
-  pendingImport=[];
+  pendingImport=[];window._cashAppSkipped=0;
   for(const line of txt.split(/\r?\n/)){
     if(!line.trim())continue;
     const parts=line.split(/\t|,(?![^"]*")/).map(s=>s.replace(/^"|"$/g,'').trim());
@@ -1111,11 +1169,11 @@ function showImportPreview(srcName){
   const inc=pendingImport.filter(r=>r.type==='income').length;
   $('#importPrev').innerHTML=`
   <div class="panel" style="margin-top:18px"><h2>👀 Review Import — ${esc(srcName)}</h2>
-    <p class="hint">${pendingImport.length} rows found (${inc} income · ${pendingImport.length-inc} expenses)${window._detectedPreset?` · 📇 Format: <b>${window._detectedPreset}</b>`:''}${pendingImport.some(r=>r.dupe)?` · ⚠️ <b>${pendingImport.filter(r=>r.dupe).length} possible duplicate(s)</b> — unchecked automatically`:''}. Auto-categorized — uncheck anything you don't want, fix categories inline, then import.</p>
+    <p class="hint">${pendingImport.length} rows found (${inc} income · ${pendingImport.length-inc} expenses)${window._detectedPreset?` · 📇 Format: <b>${window._detectedPreset}</b>`:''}${pendingImport.some(r=>r.dupe)?` · ⚠️ <b>${pendingImport.filter(r=>r.dupe).length} possible duplicate(s)</b> — unchecked automatically`:''}${window._cashAppSkipped?` · ⏭️ <b>${window._cashAppSkipped} pending/failed row(s) skipped</b>`:''}${pendingImport.some(r=>r.self)?` · ↔️ <b>${pendingImport.filter(r=>r.self).length} self-transfer(s)</b> start unchecked`:''}. Auto-categorized — uncheck anything you don't want, fix categories inline, then import.</p>
     <div class="twrap" style="max-height:380px;overflow-y:auto"><table><tr><th>✔</th><th>Date</th><th>Description</th><th>Type</th><th>Category</th><th>Business</th><th style="text-align:right">Amount</th></tr>
     ${pendingImport.map((r,i)=>`<tr ${r.dupe?'style="opacity:.55"':''}>
       <td><input type="checkbox" ${r.keep?'checked':''} onchange="pendingImport[${i}].keep=this.checked"></td>
-      <td style="white-space:nowrap">${r.date}</td><td>${esc(r.desc)}${r.dupe?' <span class="chip" style="border-color:var(--gold);color:var(--gold)">⚠️ duplicate?</span>':''}</td>
+      <td style="white-space:nowrap">${r.date}</td><td>${esc(r.desc)}${r.dupe?' <span class="chip" style="border-color:var(--gold);color:var(--gold)">⚠️ duplicate?</span>':''}${r.self?' <span class="chip">↔ self-transfer</span>':''}</td>
       <td><select onchange="pendingImport[${i}].type=this.value;showImportPreview('${esc(srcName)}')"><option value="income" ${r.type==='income'?'selected':''}>Income</option><option value="expense" ${r.type==='expense'?'selected':''}>Expense</option></select></td>
       <td><select onchange="pendingImport[${i}].cat=this.value">${CATS.filter(c=>c[2]===r.type).map(c=>`<option value="${c[0]}" ${r.cat===c[0]?'selected':''}>${c[1]}</option>`).join('')}</select></td>
       <td><select onchange="pendingImport[${i}].biz=this.value">${BIZ.map(b=>`<option value="${b.id}" ${r.biz===b.id?'selected':''}>${b.n}</option>`).join('')}</select></td>
@@ -1241,6 +1299,7 @@ function renderReports(){
   const best=months.reduce((bi,m,i)=>m.net>months[bi].net?i:bi,0);
   const growth=(()=>{const h1=months.slice(0,6).reduce((a,m)=>a+m.net,0),h2=months.slice(6).reduce((a,m)=>a+m.net,0);return {h1,h2}})();
   $('#page-reports').innerHTML=`
+  ${monthSnapshotHTML()}
   <div class="panel reveal in"><h2>📈 Reports — ${curYear}</h2><p class="hint">The year at a glance. Click any month row for its transactions.</p>
     <div class="twrap"><table><tr><th>Month</th><th style="text-align:right">Income</th><th style="text-align:right">Expenses</th><th style="text-align:right">Net</th><th style="text-align:right">Running Net</th></tr>
     ${(()=>{let run=0;return months.map((m,i)=>{run+=m.net;return `<tr style="cursor:pointer" onclick="monthJump(${i})"><td>${['January','February','March','April','May','June','July','August','September','October','November','December'][i]}${i===best&&m.net>0?' ⭐':''}</td><td class="amt pos">${fmt$(m.inc)}</td><td class="amt neg">${fmt$(m.exp)}</td><td class="amt">${fmt$(m.net)}</td><td class="amt">${fmt$(run)}</td></tr>`}).join('')})()}
@@ -1279,6 +1338,67 @@ function monthJump(i){
 function dlCSV(name,rows){
   const csv=rows.map(r=>r.map(c=>'"'+String(c==null?'':c).replace(/"/g,'""')+'"').join(',')).join('\n');
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+}
+/* --- Tool 5: Month-End Snapshot (Reports panel, 2026-11-17) ---
+   One tap exports a clean monthly P&L per business, straight from the
+   posted books. Defaults to the last completed month. */
+let snapMonth='';
+const MONTHNAMES=['January','February','March','April','May','June','July','August','September','October','November','December'];
+function defaultSnapMonth(){const d=new Date();d.setDate(1);d.setMonth(d.getMonth()-1);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')}
+function snapTitle(mk){return MONTHNAMES[+mk.slice(5,7)-1]+' '+mk.slice(0,4)}
+function snapData(mk){
+  const tx=DB.txns.filter(t=>t.date.startsWith(mk));
+  const out={};
+  BIZ.forEach(b=>{const bt=tx.filter(t=>t.biz===b.id);const cats={};let inc=0,exp=0;
+    bt.forEach(t=>{cats[t.cat]=cats[t.cat]||{inc:0,exp:0};if(t.type==='income'){cats[t.cat].inc+=t.amount;inc+=t.amount}else{cats[t.cat].exp+=t.amount;exp+=t.amount}});
+    const miles=DB.mileage.filter(m=>m.date.startsWith(mk)&&m.biz===b.id).reduce((a,m)=>a+m.miles,0);
+    out[b.id]={n:bt.length,cats,inc,exp,net:inc-exp,miles,ded:miles*(MILEAGE_RATES[mk.slice(0,4)]||0.7)};});
+  return out;
+}
+function monthSnapshotHTML(){
+  if(!snapMonth)snapMonth=defaultSnapMonth();
+  const mk=snapMonth,d=snapData(mk);
+  const any=BIZ.some(b=>d[b.id].n||d[b.id].miles>0);
+  const tot={inc:0,exp:0,net:0};BIZ.forEach(b=>{tot.inc+=d[b.id].inc;tot.exp+=d[b.id].exp;tot.net+=d[b.id].net});
+  const block=b=>{const x=d[b.id];if(!x.n&&!(x.miles>0))return '';
+    const catRows=Object.entries(x.cats).sort((a,c)=>(c[1].inc+c[1].exp)-(a[1].inc+a[1].exp)).map(([c,v])=>
+      `<div class="kv"><span style="padding-left:14px">${catName(c)}</span><span>${v.inc?`<b class="pos">+${fmt$(v.inc)}</b> `:''}${v.exp?`<b class="neg">-${fmt$(v.exp)}</b>`:''}</span></div>`).join('');
+    return `<div style="margin-top:12px"><div class="kv"><span><b>${b.e} ${b.n}</b> <span class="sub">${x.n} entr${x.n===1?'y':'ies'}</span></span><b class="${x.net>=0?'pos':'neg'}">${fmt$(x.net)}</b></div>${catRows}
+    ${x.miles>0?`<div class="kv"><span style="padding-left:14px">🚗 Mileage</span><span>${x.miles.toFixed(1)} mi ≈ <b>${fmt$(x.ded)}</b> deduction</span></div>`:''}
+    <div class="kv"><span style="padding-left:14px">Income / Expenses</span><span><b class="pos">${fmt$(x.inc)}</b> · <b class="neg">${fmt$(x.exp)}</b></span></div></div>`;};
+  return `<div class="panel reveal in"><h2>🗓️ Month-End Snapshot — ${snapTitle(mk)}</h2>
+  <p class="hint">A clean monthly profit &amp; loss per business, straight from your posted books — pick a month, then export it in one tap.</p>
+  <div class="frow" style="align-items:flex-end">
+    <div class="fld" style="max-width:220px"><label>Month</label><input type="month" value="${mk}" onchange="snapMonth=this.value;renderReports()"></div>
+    <div class="fld"><label>&nbsp;</label><div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn" onclick="snapCSV()">⬇️ Export P&amp;L (CSV)</button><button class="btn ghost" onclick="snapTXT()">⬇️ Export Summary (Text)</button></div></div>
+  </div>
+  ${any?BIZ.map(block).join('')+`<div class="kv" style="margin-top:14px;border-top:2px solid var(--line);padding-top:10px"><span><b>ALL BUSINESSES</b></span><span><b class="pos">${fmt$(tot.inc)}</b> · <b class="neg">${fmt$(tot.exp)}</b> · <b class="${tot.net>=0?'pos':'neg'}">${fmt$(tot.net)} net</b></span></div>`:'<p class="empty">No posted entries in '+snapTitle(mk)+' yet.</p>'}
+  </div>`;
+}
+function snapCSV(){
+  const mk=snapMonth||defaultSnapMonth(),d=snapData(mk);
+  const rows=[['N8Books Month-End Snapshot',snapTitle(mk)],['Business','Line','Income','Expenses']];
+  let gi=0,ge=0;
+  BIZ.forEach(b=>{const x=d[b.id];if(!x.n&&!(x.miles>0))return;gi+=x.inc;ge+=x.exp;
+    Object.entries(x.cats).sort((a,c)=>a[0].localeCompare(c[0])).forEach(([c,v])=>rows.push([b.n,catName(c),v.inc?v.inc.toFixed(2):'',v.exp?v.exp.toFixed(2):'']));
+    if(x.miles>0)rows.push([b.n,'Mileage — '+x.miles.toFixed(1)+' mi (deduction)',x.ded.toFixed(2),'']);
+    rows.push([b.n,'TOTAL',x.inc.toFixed(2),x.exp.toFixed(2)]);});
+  rows.push(['ALL BUSINESSES','TOTAL',gi.toFixed(2),ge.toFixed(2)]);
+  dlCSV('N8Books-MonthEnd-'+mk+'.csv',rows);
+  toast('🗓️ Month-end P&L downloaded — '+snapTitle(mk));
+}
+function snapTXT(){
+  const mk=snapMonth||defaultSnapMonth(),d=snapData(mk);
+  const L=['N8Books — Month-End Snapshot — '+snapTitle(mk),''];
+  BIZ.forEach(b=>{const x=d[b.id];if(!x.n&&!(x.miles>0))return;
+    L.push(b.e+' '+b.n+' — net '+fmt$(x.net));
+    Object.entries(x.cats).sort((a,c)=>(c[1].inc+c[1].exp)-(a[1].inc+a[1].exp)).forEach(([c,v])=>{if(v.inc)L.push('  + '+catName(c)+': '+fmt$(v.inc));if(v.exp)L.push('  - '+catName(c)+': '+fmt$(v.exp))});
+    if(x.miles>0)L.push('  🚗 Mileage: '+x.miles.toFixed(1)+' mi ≈ '+fmt$(x.ded)+' deduction');
+    L.push('  Income '+fmt$(x.inc)+' · Expenses '+fmt$(x.exp),'');});
+  const tot={inc:0,exp:0};BIZ.forEach(b=>{tot.inc+=d[b.id].inc;tot.exp+=d[b.id].exp});
+  L.push('ALL BUSINESSES — Income '+fmt$(tot.inc)+' · Expenses '+fmt$(tot.exp)+' · Net '+fmt$(tot.inc-tot.exp));
+  download('N8Books-MonthEnd-'+mk+'.txt',L.join('\n'),'text/plain');
+  toast('🗓️ Month-end summary downloaded — '+snapTitle(mk));
 }
 /* --- Tool 1: Preparer Tax Pack (Tax HQ buttons) --- */
 function taxPackCSV(kind){
